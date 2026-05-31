@@ -1,0 +1,11 @@
+{
+  "name": "@kafka-playground/observability",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "build": "echo \"No build configured\"",
+    "lint": "echo \"No lint configured\"",
+    "test": "echo \"No tests configured\""
+  }
+}

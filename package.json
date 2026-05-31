@@ -5,6 +5,10 @@
   "scripts": {
     "dev": "pnpm --filter gateway-service dev",
     "start": "pnpm --filter gateway-service start",
+    "infra:up": "docker compose --project-directory infrastructure --env-file infrastructure/.env -f infrastructure/docker-compose.yml up -d",
+    "infra:down": "docker compose --project-directory infrastructure --env-file infrastructure/.env -f infrastructure/docker-compose.yml down",
+    "infra:logs": "docker compose --project-directory infrastructure --env-file infrastructure/.env -f infrastructure/docker-compose.yml logs -f",
+    "infra:config": "docker compose --project-directory infrastructure --env-file infrastructure/.env -f infrastructure/docker-compose.yml config",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test"
