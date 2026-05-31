@@ -3,9 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "type": "commonjs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
-    "build": "echo \"No build configured\"",
-    "lint": "echo \"No lint configured\"",
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
     "test": "echo \"No tests configured\""
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "typescript": "^5.7.3"
   }
 }

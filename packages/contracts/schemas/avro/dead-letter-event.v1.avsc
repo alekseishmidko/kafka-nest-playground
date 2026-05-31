@@ -1,0 +1,29 @@
+{
+  "type": "record",
+  "name": "DeadLetterEvent",
+  "namespace": "kafka_playground.platform.events.v1",
+  "fields": [
+    { "name": "eventId", "type": "string" },
+    { "name": "eventType", "type": "string", "default": "DeadLetterEvent" },
+    { "name": "eventVersion", "type": "int", "default": 1 },
+    { "name": "occurredAt", "type": "string" },
+    { "name": "correlationId", "type": "string" },
+    { "name": "causationId", "type": ["null", "string"], "default": null },
+    { "name": "producer", "type": "string" },
+    {
+      "name": "payload",
+      "type": {
+        "type": "record",
+        "name": "DeadLetterPayload",
+        "fields": [
+          { "name": "originalTopic", "type": "string" },
+          { "name": "originalPartition", "type": "int" },
+          { "name": "originalOffset", "type": "string" },
+          { "name": "errorMessage", "type": "string" },
+          { "name": "errorStack", "type": ["null", "string"], "default": null },
+          { "name": "rawEvent", "type": ["null", "string"], "default": null }
+        ]
+      }
+    }
+  ]
+}

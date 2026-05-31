@@ -8,6 +8,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "tsc -p tsconfig.json --noEmit",
+    "schemas:register": "node scripts/register-avro-schemas.mjs",
     "test": "echo \"No tests configured\""
   },
   "devDependencies": {

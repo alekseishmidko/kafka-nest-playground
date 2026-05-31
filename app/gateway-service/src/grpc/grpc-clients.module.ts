@@ -2,20 +2,23 @@ import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { ClientsModule, Transport } from "@nestjs/microservices";
 import { join } from "node:path";
-import { USERS_GRPC_CLIENT } from "./grpc-clients.constants";
+import { ORDERS_GRPC_CLIENT } from "./grpc-clients.constants";
 
 @Module({
   imports: [
     ClientsModule.registerAsync([
       {
-        name: USERS_GRPC_CLIENT,
+        name: ORDERS_GRPC_CLIENT,
         inject: [ConfigService],
         useFactory: (config: ConfigService) => ({
           transport: Transport.GRPC,
           options: {
-            package: "users",
-            protoPath: join(process.cwd(), "proto/users.proto"),
-            url: config.get<string>("USERS_GRPC_URL", "localhost:50051")
+            package: "orders",
+            protoPath: join(
+              process.cwd(),
+              "../../packages/contracts/proto/orders.proto"
+            ),
+            url: config.getOrThrow<string>("ORDER_SERVICE_GRPC_URL")
           }
         })
       }
