@@ -1,0 +1,26 @@
+{
+  "type": "record",
+  "name": "OrderRiskApproved",
+  "namespace": "kafka_playground.risk.events.v1",
+  "fields": [
+    { "name": "eventId", "type": "string" },
+    { "name": "eventType", "type": "string", "default": "OrderRiskApproved" },
+    { "name": "eventVersion", "type": "int", "default": 1 },
+    { "name": "occurredAt", "type": "string" },
+    { "name": "correlationId", "type": "string" },
+    { "name": "causationId", "type": ["null", "string"], "default": null },
+    { "name": "producer", "type": "string" },
+    {
+      "name": "payload",
+      "type": {
+        "type": "record",
+        "name": "OrderRiskApprovedPayload",
+        "fields": [
+          { "name": "orderId", "type": "string" },
+          { "name": "riskScore", "type": "double" },
+          { "name": "approvedBy", "type": "string" }
+        ]
+      }
+    }
+  ]
+}

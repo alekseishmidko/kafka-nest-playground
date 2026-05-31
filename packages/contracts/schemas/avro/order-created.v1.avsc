@@ -1,0 +1,28 @@
+{
+  "type": "record",
+  "name": "OrderCreated",
+  "namespace": "kafka_playground.order.events.v1",
+  "fields": [
+    { "name": "eventId", "type": "string" },
+    { "name": "eventType", "type": "string", "default": "OrderCreated" },
+    { "name": "eventVersion", "type": "int", "default": 1 },
+    { "name": "occurredAt", "type": "string" },
+    { "name": "correlationId", "type": "string" },
+    { "name": "causationId", "type": ["null", "string"], "default": null },
+    { "name": "producer", "type": "string" },
+    {
+      "name": "payload",
+      "type": {
+        "type": "record",
+        "name": "OrderCreatedPayload",
+        "fields": [
+          { "name": "orderId", "type": "string" },
+          { "name": "userId", "type": "string" },
+          { "name": "currency", "type": "string" },
+          { "name": "totalAmount", "type": "double" },
+          { "name": "itemCount", "type": "int" }
+        ]
+      }
+    }
+  ]
+}

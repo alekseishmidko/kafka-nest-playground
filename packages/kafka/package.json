@@ -3,9 +3,23 @@
   "version": "0.1.0",
   "private": true,
   "type": "commonjs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
-    "build": "echo \"No build configured\"",
-    "lint": "echo \"No lint configured\"",
+    "prebuild": "pnpm --filter @kafka-playground/contracts build",
+    "build": "tsc -p tsconfig.json",
+    "prelint": "pnpm --filter @kafka-playground/contracts build",
+    "lint": "tsc -p tsconfig.json --noEmit",
     "test": "echo \"No tests configured\""
+  },
+  "dependencies": {
+    "@kafka-playground/contracts": "workspace:*",
+    "@kafkajs/confluent-schema-registry": "^4.1.0",
+    "@nestjs/common": "^11.0.0",
+    "kafkajs": "^2.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "typescript": "^5.7.3"
   }
 }

@@ -1,0 +1,27 @@
+{
+  "type": "record",
+  "name": "PaymentFailed",
+  "namespace": "kafka_playground.payment.events.v1",
+  "fields": [
+    { "name": "eventId", "type": "string" },
+    { "name": "eventType", "type": "string", "default": "PaymentFailed" },
+    { "name": "eventVersion", "type": "int", "default": 1 },
+    { "name": "occurredAt", "type": "string" },
+    { "name": "correlationId", "type": "string" },
+    { "name": "causationId", "type": ["null", "string"], "default": null },
+    { "name": "producer", "type": "string" },
+    {
+      "name": "payload",
+      "type": {
+        "type": "record",
+        "name": "PaymentFailedPayload",
+        "fields": [
+          { "name": "paymentId", "type": ["null", "string"], "default": null },
+          { "name": "orderId", "type": "string" },
+          { "name": "reason", "type": "string" },
+          { "name": "provider", "type": "string" }
+        ]
+      }
+    }
+  ]
+}

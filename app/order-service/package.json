@@ -1,14 +1,14 @@
 {
-  "name": "gateway-service",
+  "name": "order-service",
   "version": "0.1.0",
   "private": true,
   "type": "commonjs",
   "scripts": {
     "dev": "nest start --watch",
-    "build": "pnpm --filter @kafka-playground/config build && pnpm --filter @kafka-playground/observability build && nest build",
+    "build": "pnpm --filter @kafka-playground/config build && pnpm --filter @kafka-playground/contracts build && pnpm --filter @kafka-playground/kafka build && pnpm --filter @kafka-playground/observability build && nest build",
     "start": "node dist/main.js",
     "start:prod": "node dist/main.js",
-    "prelint": "pnpm --filter @kafka-playground/config build && pnpm --filter @kafka-playground/observability build",
+    "prelint": "pnpm --filter @kafka-playground/config build && pnpm --filter @kafka-playground/contracts build && pnpm --filter @kafka-playground/kafka build && pnpm --filter @kafka-playground/observability build",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "echo \"No tests configured\""
   },
@@ -16,17 +16,22 @@
     "@grpc/grpc-js": "^1.12.5",
     "@grpc/proto-loader": "^0.7.13",
     "@kafka-playground/config": "workspace:^",
+    "@kafka-playground/contracts": "workspace:^",
+    "@kafka-playground/kafka": "workspace:^",
     "@kafka-playground/observability": "workspace:^",
     "@nestjs/common": "^11.0.0",
     "@nestjs/config": "^4.0.0",
     "@nestjs/core": "^11.0.0",
     "@nestjs/microservices": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",
+    "@nestjs/typeorm": "^11.0.0",
     "nestjs-pino": "^4.6.1",
+    "pg": "^8.13.1",
     "pino": "^10.3.1",
     "pino-http": "^11.0.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "typeorm": "^0.3.24"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.0",
