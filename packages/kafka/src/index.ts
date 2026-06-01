@@ -4,6 +4,7 @@ export * from "./kafka-logger";
 export * from "./kafka-module";
 export * from "./kafka-producer.service";
 export * from "./kafka.tokens";
+export * from "./kafkajs-consumer-client";
 export * from "./kafkajs-producer-client";
 export * from "./schema-registry-avro-codec";
 export * from "./types";

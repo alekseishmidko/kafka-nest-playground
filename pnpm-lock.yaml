@@ -143,6 +143,64 @@ importers:
         specifier: ^5.7.3
         version: 5.9.3
 
+  app/risk-service:
+    dependencies:
+      '@kafka-playground/config':
+        specifier: workspace:^
+        version: link:../../packages/config
+      '@kafka-playground/contracts':
+        specifier: workspace:^
+        version: link:../../packages/contracts
+      '@kafka-playground/kafka':
+        specifier: workspace:^
+        version: link:../../packages/kafka
+      '@kafka-playground/observability':
+        specifier: workspace:^
+        version: link:../../packages/observability
+      '@nestjs/common':
+        specifier: ^11.0.0
+        version: 11.1.24(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/config':
+        specifier: ^4.0.0
+        version: 4.0.4(@nestjs/common@11.1.24(reflect-metadata@0.2.2)(rxjs@7.8.2))(rxjs@7.8.2)
+      '@nestjs/core':
+        specifier: ^11.0.0
+        version: 11.1.24(@nestjs/common@11.1.24(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/microservices@11.1.24)(@nestjs/platform-express@11.1.24)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/platform-express':
+        specifier: ^11.0.0
+        version: 11.1.24(@nestjs/common@11.1.24(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.24)
+      kafkajs:
+        specifier: ^2.2.4
+        version: 2.2.4
+      nestjs-pino:
+        specifier: ^4.6.1
+        version: 4.6.1(@nestjs/common@11.1.24(reflect-metadata@0.2.2)(rxjs@7.8.2))(pino-http@11.0.0)(pino@10.3.1)(rxjs@7.8.2)
+      pino:
+        specifier: ^10.3.1
+        version: 10.3.1
+      pino-http:
+        specifier: ^11.0.0
+        version: 11.0.0
+      reflect-metadata:
+        specifier: ^0.2.2
+        version: 0.2.2
+      rxjs:
+        specifier: ^7.8.1
+        version: 7.8.2
+    devDependencies:
+      '@nestjs/cli':
+        specifier: ^11.0.0
+        version: 11.0.21(@types/node@22.19.19)
+      '@types/node':
+        specifier: ^22.10.7
+        version: 22.19.19
+      pino-pretty:
+        specifier: ^13.1.3
+        version: 13.1.3
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+
   packages/config:
     devDependencies:
       '@types/node':
