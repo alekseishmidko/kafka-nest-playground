@@ -39,6 +39,8 @@ type OrderCreatedEvent = EventEnvelope[OrderCreatedPayload]
 
 type OrderRiskApprovedPayload struct {
 	OrderID    string  `json:"orderId"`
+	Amount     float64 `json:"amount"`
+	Currency   string  `json:"currency"`
 	RiskScore  float64 `json:"riskScore"`
 	ApprovedBy string  `json:"approvedBy"`
 }

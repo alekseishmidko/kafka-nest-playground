@@ -17,6 +17,8 @@
         "name": "OrderRiskApprovedPayload",
         "fields": [
           { "name": "orderId", "type": "string" },
+          { "name": "amount", "type": "double", "default": 0 },
+          { "name": "currency", "type": "string", "default": "USD" },
           { "name": "riskScore", "type": "double" },
           { "name": "approvedBy", "type": "string" }
         ]

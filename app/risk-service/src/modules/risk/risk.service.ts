@@ -83,6 +83,8 @@ export class RiskService {
         eventType: "OrderRiskApproved",
         payload: {
           orderId: source.payload.orderId,
+          amount: source.payload.totalAmount,
+          currency: source.payload.currency,
           riskScore: decision.score,
           approvedBy: "risk-service"
         }

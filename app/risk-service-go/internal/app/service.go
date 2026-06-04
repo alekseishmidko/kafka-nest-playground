@@ -181,6 +181,8 @@ func (s *Service) riskEventNative(source contracts.OrderCreatedEvent, decision r
 		base["eventType"] = contracts.EventOrderRiskApproved
 		base["payload"] = map[string]interface{}{
 			"orderId":    source.Payload.OrderID,
+			"amount":     source.Payload.TotalAmount,
+			"currency":   source.Payload.Currency,
 			"riskScore":  decision.Score,
 			"approvedBy": "risk-service-go",
 		}
