@@ -55,6 +55,8 @@ Topic:
   eventType: "OrderRiskApproved",
   payload: {
     orderId: string,
+    amount: number,
+    currency: string,
     riskScore: number,
     approvedBy: "risk-service"
   }

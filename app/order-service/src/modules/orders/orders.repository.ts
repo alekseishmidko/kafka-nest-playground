@@ -30,4 +30,10 @@ export class OrdersRepository {
 
     return this.repository.save(order);
   }
+
+  async updateStatus(orderId: string, status: OrderStatus): Promise<boolean> {
+    const result = await this.repository.update({ id: orderId }, { status });
+
+    return (result.affected ?? 0) > 0;
+  }
 }

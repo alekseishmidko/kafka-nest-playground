@@ -27,10 +27,28 @@ export class KafkaConsumerRunner {
     },
     handler: KafkaConsumeHandler<TEvent>
   ): Promise<void> {
-    await this.consumer.subscribe({
-      topic: options.topic,
-      fromBeginning: options.fromBeginning
-    });
+    await this.subscribeMany(
+      {
+        topics: [options.topic],
+        fromBeginning: options.fromBeginning
+      },
+      handler
+    );
+  }
+
+  async subscribeMany<TEvent extends DomainEvent>(
+    options: {
+      topics: Array<KafkaConsumerMessageContext<TEvent>["topic"]>;
+      fromBeginning?: boolean;
+    },
+    handler: KafkaConsumeHandler<TEvent>
+  ): Promise<void> {
+    for (const topic of options.topics) {
+      await this.consumer.subscribe({
+        topic,
+        fromBeginning: options.fromBeginning
+      });
+    }
 
     await this.consumer.run({
       eachMessage: async ({ topic, partition, message }) => {

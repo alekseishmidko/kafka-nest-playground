@@ -7,7 +7,11 @@ import {
 } from "typeorm";
 
 export enum OrderStatus {
-  Pending = "PENDING"
+  Pending = "PENDING",
+  RiskApproved = "RISK_APPROVED",
+  RiskRejected = "RISK_REJECTED",
+  PaymentAuthorized = "PAYMENT_AUTHORIZED",
+  PaymentFailed = "PAYMENT_FAILED"
 }
 
 export interface OrderItemSnapshot {

@@ -23,6 +23,8 @@ export type OrderCreatedEvent = EventEnvelope<OrderCreatedPayload, "OrderCreated
 
 export interface OrderRiskApprovedPayload {
   orderId: string;
+  amount: number;
+  currency: string;
   riskScore: number;
   approvedBy: string;
 }
