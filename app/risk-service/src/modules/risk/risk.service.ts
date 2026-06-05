@@ -7,7 +7,7 @@ import {
 } from "@kafka-playground/contracts";
 import { KafkaProducerService } from "@kafka-playground/kafka";
 import { randomUUID } from "node:crypto";
-import { PinoLogger } from "nestjs-pino";
+import { PinoLogger } from "@kafka-playground/observability";
 import { RiskScorer } from "./risk.scorer";
 
 @Injectable()

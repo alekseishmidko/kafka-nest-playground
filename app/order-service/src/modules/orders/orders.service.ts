@@ -9,7 +9,7 @@ import {
 } from "@kafka-playground/contracts";
 import { KafkaProducerService } from "@kafka-playground/kafka";
 import { randomUUID } from "node:crypto";
-import { PinoLogger } from "nestjs-pino";
+import { PinoLogger } from "@kafka-playground/observability";
 import type { CreateOrderDto } from "./dto/create-order.dto";
 import { OrderStatus } from "./entities/order.entity";
 import { OrdersRepository } from "./orders.repository";
@@ -79,22 +79,36 @@ export class OrdersService {
     // Any service subscribed to order.order-events can react independently:
     // risk-service-go can run fraud scoring, analytics-service-go can update
     // projections, and notification-service can trigger user-facing messages.
-    await this.kafkaProducer.publish({
-      topic: EVENT_TOPIC_MAP.OrderCreated,
-      key: order.id,
-      event
-    });
-
-    this.logger.info(
-      {
-        orderId: order.id,
-        eventId: event.eventId,
-        eventType: event.eventType,
+    try {
+      await this.kafkaProducer.publish({
         topic: EVENT_TOPIC_MAP.OrderCreated,
-        correlationId: event.correlationId
-      },
-      "OrderCreated event published"
-    );
+        key: order.id,
+        event
+      });
+
+      this.logger.info(
+        {
+          orderId: order.id,
+          eventId: event.eventId,
+          eventType: event.eventType,
+          topic: EVENT_TOPIC_MAP.OrderCreated,
+          correlationId: event.correlationId
+        },
+        "OrderCreated event published"
+      );
+    } catch (error) {
+      this.logger.warn(
+        {
+          orderId: order.id,
+          eventId: event.eventId,
+          eventType: event.eventType,
+          topic: EVENT_TOPIC_MAP.OrderCreated,
+          correlationId: event.correlationId,
+          error
+        },
+        "OrderCreated event publish failed; order remains pending"
+      );
+    }
 
     return {
       id: order.id,

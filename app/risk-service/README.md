@@ -120,9 +120,6 @@ score < RISK_SCORE_THRESHOLD  => OrderRiskApproved
 ```env
 APP_ENV=local
 LOG_LEVEL=debug
-PORT=3002
-HOST=0.0.0.0
-
 KAFKA_CLIENT_ID=risk-service
 KAFKA_BROKERS=localhost:9092
 KAFKA_CONSUMER_GROUP_ID=risk-service
@@ -181,12 +178,9 @@ pnpm --filter risk-service build
 
 Сейчас у сервиса нет отдельного unit-test script, кроме placeholder по workspace-паттерну.
 
-## Health Endpoints
+## Runtime
 
-```http
-GET /healthz
-GET /readyz
-```
+`risk-service` is a background Kafka worker. It does not expose HTTP endpoints.
 
 Локальный адрес по умолчанию:
 

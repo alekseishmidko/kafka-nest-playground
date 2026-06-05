@@ -12,6 +12,8 @@ import type {
 
 @Injectable()
 export class KafkaConsumerRunner {
+  private readonly retryInMs = 5000;
+
   constructor(
     @Inject(KAFKA_CONSUMER_CLIENT)
     private readonly consumer: KafkaConsumerClient,
@@ -43,59 +45,81 @@ export class KafkaConsumerRunner {
     },
     handler: KafkaConsumeHandler<TEvent>
   ): Promise<void> {
-    for (const topic of options.topics) {
-      await this.consumer.subscribe({
-        topic,
-        fromBeginning: options.fromBeginning
-      });
-    }
+    void this.startWithRetry(options, handler);
+  }
 
-    await this.consumer.run({
-      eachMessage: async ({ topic, partition, message }) => {
-        let event: TEvent | undefined;
-
-        try {
-          if (!message.value) {
-            throw new Error("Kafka message value is empty");
-          }
-
-          const decodedEvent = await this.codec.deserialize<TEvent>(message.value);
-          event = decodedEvent;
-
-          const context: KafkaConsumerMessageContext<TEvent> = {
-            topic,
-            partition,
-            offset: message.offset,
-            key: message.key?.toString("utf8") ?? null,
-            headers: message.headers ?? {},
-            event: decodedEvent,
-            correlationId:
-              readHeader(message.headers, KAFKA_HEADER_NAMES.correlationId) ??
-              decodedEvent.correlationId
-          };
-
-          this.logger.logConsumed({
-            topic,
-            partition,
-            offset: message.offset,
-            event: decodedEvent
-          });
-
-          await handler(context);
-        } catch (error) {
-          this.logger.logFailed({
-            topic,
-            partition,
-            offset: message.offset,
-            eventType:
-              event?.eventType ?? readHeader(message.headers, KAFKA_HEADER_NAMES.eventType),
-            eventId: event?.eventId ?? readHeader(message.headers, KAFKA_HEADER_NAMES.eventId),
-            error
-          });
-
-          throw error;
-        }
+  private async startWithRetry<TEvent extends DomainEvent>(
+    options: {
+      topics: Array<KafkaConsumerMessageContext<TEvent>["topic"]>;
+      fromBeginning?: boolean;
+    },
+    handler: KafkaConsumeHandler<TEvent>
+  ): Promise<void> {
+    try {
+      for (const topic of options.topics) {
+        await this.consumer.subscribe({
+          topic,
+          fromBeginning: options.fromBeginning
+        });
       }
-    });
+
+      await this.consumer.run({
+        eachMessage: async ({ topic, partition, message }) => {
+          let event: TEvent | undefined;
+
+          try {
+            if (!message.value) {
+              throw new Error("Kafka message value is empty");
+            }
+
+            const decodedEvent = await this.codec.deserialize<TEvent>(message.value);
+            event = decodedEvent;
+
+            const context: KafkaConsumerMessageContext<TEvent> = {
+              topic,
+              partition,
+              offset: message.offset,
+              key: message.key?.toString("utf8") ?? null,
+              headers: message.headers ?? {},
+              event: decodedEvent,
+              correlationId:
+                readHeader(message.headers, KAFKA_HEADER_NAMES.correlationId) ??
+                decodedEvent.correlationId
+            };
+
+            this.logger.logConsumed({
+              topic,
+              partition,
+              offset: message.offset,
+              event: decodedEvent
+            });
+
+            await handler(context);
+          } catch (error) {
+            this.logger.logFailed({
+              topic,
+              partition,
+              offset: message.offset,
+              eventType:
+                event?.eventType ?? readHeader(message.headers, KAFKA_HEADER_NAMES.eventType),
+              eventId: event?.eventId ?? readHeader(message.headers, KAFKA_HEADER_NAMES.eventId),
+              error
+            });
+
+            throw error;
+          }
+        }
+      });
+    } catch (error) {
+      this.logger.logConsumerStartFailed({
+        topics: options.topics,
+        retryInMs: this.retryInMs,
+        error
+      });
+
+      setTimeout(() => {
+        void this.startWithRetry(options, handler);
+      }, this.retryInMs);
+    }
   }
 }

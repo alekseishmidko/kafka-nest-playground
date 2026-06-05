@@ -1,4 +1,4 @@
-import { Kafka, type Consumer, type IHeaders } from "kafkajs";
+import { Kafka, logLevel, type Consumer, type IHeaders } from "kafkajs";
 import type { KafkaConsumerClient, KafkaEachMessagePayload, KafkaHeaders } from "./types";
 
 export interface KafkaJsConsumerClientOptions {
@@ -14,7 +14,8 @@ export class KafkaJsConsumerClient implements KafkaConsumerClient {
   constructor(options: KafkaJsConsumerClientOptions) {
     this.consumer = new Kafka({
       clientId: options.clientId,
-      brokers: options.brokers
+      brokers: options.brokers,
+      logLevel: logLevel.NOTHING
     }).consumer({
       groupId: options.groupId
     });
@@ -51,7 +52,10 @@ export class KafkaJsConsumerClient implements KafkaConsumerClient {
   }
 
   private async connect(): Promise<void> {
-    this.connectPromise ??= this.consumer.connect();
+    this.connectPromise ??= this.consumer.connect().catch((error: unknown) => {
+      this.connectPromise = null;
+      throw error;
+    });
 
     return this.connectPromise;
   }

@@ -1,4 +1,4 @@
-import { DynamicModule, Module, Provider, Type } from "@nestjs/common";
+import { DynamicModule, Global, Module, Provider, Type } from "@nestjs/common";
 import { KafkaConsumerRunner } from "./kafka-consumer-runner";
 import { KafkaEventLogger } from "./kafka-logger";
 import { KafkaProducerService } from "./kafka-producer.service";
@@ -24,6 +24,7 @@ export interface KafkaModuleAsyncOptions {
   ) => KafkaModuleRegisterOptions | Promise<KafkaModuleRegisterOptions>;
 }
 
+@Global()
 @Module({})
 export class KafkaModule {
   static register(options: KafkaModuleRegisterOptions): DynamicModule {

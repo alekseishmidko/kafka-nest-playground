@@ -1,7 +1,7 @@
 import { ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
-import { Logger } from "nestjs-pino";
+import { Logger } from "@kafka-playground/observability";
 import { logServiceStarted } from "@kafka-playground/observability";
 import { AppModule } from "./app.module";
 

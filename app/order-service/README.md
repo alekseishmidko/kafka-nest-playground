@@ -30,11 +30,16 @@ Kafka key is `orderId` for order/risk/payment topics.
 - `PAYMENT_AUTHORIZED`
 - `PAYMENT_FAILED`
 
+## Runtime
+
+`order-service` does not expose HTTP. It runs as a gRPC server and consumes Kafka events.
+
 ## Configuration
 
-`order-service` needs a producer and consumer Kafka client:
+`order-service` needs a gRPC bind URL plus producer and consumer Kafka clients:
 
 ```env
+ORDER_GRPC_URL=0.0.0.0:50052
 KAFKA_CLIENT_ID=order-service
 KAFKA_BROKERS=localhost:9092
 KAFKA_CONSUMER_GROUP_ID=order-service

@@ -5,7 +5,7 @@ import {
   type OrderRiskRejectedEvent
 } from "@kafka-playground/contracts";
 import { KafkaConsumerRunner } from "@kafka-playground/kafka";
-import { PinoLogger } from "nestjs-pino";
+import { PinoLogger } from "@kafka-playground/observability";
 import { PaymentService } from "./payment.service";
 
 @Injectable()

@@ -29,6 +29,10 @@ const schemas = [
     fileName: "payment-failed.v1.avsc"
   },
   {
+    subject: "notification.notification-commands-NotificationCommand-value",
+    fileName: "notification-command.v1.avsc"
+  },
+  {
     subject: "dead-letter.events-DeadLetterEvent-value",
     fileName: "dead-letter-event.v1.avsc"
   }

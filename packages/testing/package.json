@@ -6,6 +6,10 @@
   "scripts": {
     "build": "echo \"No build configured\"",
     "lint": "echo \"No lint configured\"",
-    "test": "echo \"No tests configured\""
+    "test": "echo \"No tests configured\"",
+    "test:e2e:order-pipeline": "node scripts/order-pipeline.e2e.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.21.0"
   }
 }

@@ -3,19 +3,18 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { getServiceEnvFilePaths, loadServiceEnvFiles } from "@kafka-playground/config";
 import {
   KafkaJsConsumerClient,
-  KafkaJsProducerClient,
   KafkaModule
 } from "@kafka-playground/kafka";
 import { createServiceLoggerModule } from "@kafka-playground/observability";
 import { join } from "node:path";
-import { PaymentModule } from "./modules/payment/payment.module";
+import { NotificationModule } from "./modules/notification/notification.module";
 
 loadServiceEnvFiles(join(process.cwd()));
 
 @Module({
   imports: [
     createServiceLoggerModule({
-      serviceName: "payment-service",
+      serviceName: "notification-service",
       environment: process.env.APP_ENV ?? "local"
     }),
     ConfigModule.forRoot({
@@ -32,13 +31,9 @@ loadServiceEnvFiles(join(process.cwd()));
 
         return {
           clientId,
-          serviceName: "payment-service",
+          serviceName: "notification-service",
           brokers,
           schemaRegistryUrl: configService.getOrThrow<string>("SCHEMA_REGISTRY_URL"),
-          producerClient: new KafkaJsProducerClient({
-            clientId,
-            brokers
-          }),
           consumerClient: new KafkaJsConsumerClient({
             clientId,
             brokers,
@@ -47,7 +42,7 @@ loadServiceEnvFiles(join(process.cwd()));
         };
       }
     }),
-    PaymentModule
+    NotificationModule
   ]
 })
 export class AppModule {}
