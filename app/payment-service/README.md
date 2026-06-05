@@ -72,8 +72,6 @@ Topic:
 ```env
 APP_ENV=local
 LOG_LEVEL=debug
-PORT=3003
-HOST=0.0.0.0
 
 KAFKA_CLIENT_ID=payment-service
 KAFKA_BROKERS=localhost:9092
@@ -101,9 +99,6 @@ pnpm --filter payment-service lint
 pnpm --filter payment-service build
 ```
 
-## Health Endpoints
+## Runtime
 
-```http
-GET /healthz
-GET /readyz
-```
+`payment-service` is a background Kafka worker. It does not expose HTTP endpoints.

@@ -1,0 +1,28 @@
+{
+  "type": "record",
+  "name": "NotificationCommand",
+  "namespace": "kafka_playground.notification.commands.v1",
+  "fields": [
+    { "name": "eventId", "type": "string" },
+    { "name": "eventType", "type": "string", "default": "NotificationCommand" },
+    { "name": "eventVersion", "type": "int", "default": 1 },
+    { "name": "occurredAt", "type": "string" },
+    { "name": "correlationId", "type": "string" },
+    { "name": "causationId", "type": ["null", "string"], "default": null },
+    { "name": "producer", "type": "string" },
+    {
+      "name": "payload",
+      "type": {
+        "type": "record",
+        "name": "NotificationCommandPayload",
+        "fields": [
+          { "name": "notificationId", "type": "string" },
+          { "name": "recipient", "type": "string" },
+          { "name": "channel", "type": "string" },
+          { "name": "template", "type": "string" },
+          { "name": "dataJson", "type": "string" }
+        ]
+      }
+    }
+  ]
+}

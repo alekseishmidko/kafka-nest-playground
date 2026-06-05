@@ -82,8 +82,8 @@ export function logServiceStarted(
   logger: { log(message: string, context?: string): void },
   params: {
     serviceName: string;
-    host: string;
-    port: number;
+    host?: string;
+    port?: number;
     environment: string;
     grpcUrl?: string;
   }

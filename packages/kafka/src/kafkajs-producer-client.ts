@@ -1,4 +1,4 @@
-import { Kafka, type Producer } from "kafkajs";
+import { Kafka, logLevel, Partitioners, type Producer } from "kafkajs";
 import type {
   KafkaProducerClient,
   KafkaProducerClientMessage,
@@ -17,8 +17,11 @@ export class KafkaJsProducerClient implements KafkaProducerClient {
   constructor(options: KafkaJsProducerClientOptions) {
     this.producer = new Kafka({
       clientId: options.clientId,
-      brokers: options.brokers
-    }).producer();
+      brokers: options.brokers,
+      logLevel: logLevel.NOTHING
+    }).producer({
+      createPartitioner: Partitioners.LegacyPartitioner
+    });
   }
 
   async send(message: KafkaProducerClientMessage): Promise<KafkaProducerRecordMetadata[]> {
@@ -28,7 +31,10 @@ export class KafkaJsProducerClient implements KafkaProducerClient {
   }
 
   private async connect(): Promise<void> {
-    this.connectPromise ??= this.producer.connect();
+    this.connectPromise ??= this.producer.connect().catch((error: unknown) => {
+      this.connectPromise = null;
+      throw error;
+    });
 
     return this.connectPromise;
   }

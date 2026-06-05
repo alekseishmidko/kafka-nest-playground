@@ -1,6 +1,6 @@
 import { Inject, Injectable, OnModuleInit } from "@nestjs/common";
 import { ClientGrpc } from "@nestjs/microservices";
-import { PinoLogger } from "nestjs-pino";
+import { PinoLogger } from "@kafka-playground/observability";
 import { lastValueFrom, Observable } from "rxjs";
 import { ORDERS_GRPC_CLIENT } from "../../grpc/grpc-clients.constants";
 import type { CreateOrderDto } from "./dto/create-order.dto";

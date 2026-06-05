@@ -13,7 +13,7 @@ async function bootstrap() {
   app.enableShutdownHooks();
 
   logServiceStarted(logger, {
-    serviceName: "payment-service",
+    serviceName: "notification-service",
     environment: config.getOrThrow<string>("APP_ENV")
   });
 }

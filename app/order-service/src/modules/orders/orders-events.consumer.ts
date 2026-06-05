@@ -7,7 +7,7 @@ import {
   type PaymentFailedEvent
 } from "@kafka-playground/contracts";
 import { KafkaConsumerRunner } from "@kafka-playground/kafka";
-import { PinoLogger } from "nestjs-pino";
+import { PinoLogger } from "@kafka-playground/observability";
 import { OrdersService } from "./orders.service";
 
 type OrderStatusEvent =

@@ -8,7 +8,6 @@ import {
 } from "@kafka-playground/kafka";
 import { createServiceLoggerModule } from "@kafka-playground/observability";
 import { join } from "node:path";
-import { HealthModule } from "./modules/health/health.module";
 import { RiskModule } from "./modules/risk/risk.module";
 
 loadServiceEnvFiles(join(process.cwd()));
@@ -48,7 +47,6 @@ loadServiceEnvFiles(join(process.cwd()));
         };
       }
     }),
-    HealthModule,
     RiskModule
   ]
 })

@@ -1,14 +1,21 @@
 import { ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
-import { Transport } from "@nestjs/microservices";
-import { Logger } from "nestjs-pino";
+import { type MicroserviceOptions, Transport } from "@nestjs/microservices";
+import { Logger } from "@kafka-playground/observability";
 import { logServiceStarted } from "@kafka-playground/observability";
 import { join } from "node:path";
 import { AppModule } from "./app.module";
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.createMicroservice<MicroserviceOptions>(AppModule, {
+    transport: Transport.GRPC,
+    options: {
+      package: "orders",
+      protoPath: join(process.cwd(), "../../packages/contracts/proto/orders.proto"),
+      url: process.env.ORDER_GRPC_URL ?? "0.0.0.0:50052"
+    }
+  });
   const config = app.get(ConfigService);
   const logger = app.get(Logger);
 
@@ -21,25 +28,9 @@ async function bootstrap() {
     })
   );
 
-  app.connectMicroservice({
-    transport: Transport.GRPC,
-    options: {
-      package: "orders",
-      protoPath: join(process.cwd(), "../../packages/contracts/proto/orders.proto"),
-      url: config.getOrThrow<string>("ORDER_GRPC_URL")
-    }
-  });
-
-  await app.startAllMicroservices();
-
-  const port = Number(config.getOrThrow<string>("PORT"));
-  const host = config.getOrThrow<string>("HOST");
-
-  await app.listen(port, host);
+  await app.listen();
   logServiceStarted(logger, {
     serviceName: "order-service",
-    host,
-    port,
     environment: config.getOrThrow<string>("APP_ENV"),
     grpcUrl: config.getOrThrow<string>("ORDER_GRPC_URL")
   });

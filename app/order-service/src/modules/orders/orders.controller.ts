@@ -1,16 +1,11 @@
-import { Body, Controller, Post } from "@nestjs/common";
+import { Controller } from "@nestjs/common";
 import { GrpcMethod } from "@nestjs/microservices";
 import type { CreateOrderDto } from "./dto/create-order.dto";
 import { OrdersService } from "./orders.service";
 
-@Controller("orders")
+@Controller()
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
-
-  @Post()
-  createOrderHttp(@Body() dto: CreateOrderDto) {
-    return this.ordersService.createOrder(dto);
-  }
 
   @GrpcMethod("OrdersService", "CreateOrder")
   createOrder(dto: CreateOrderDto) {

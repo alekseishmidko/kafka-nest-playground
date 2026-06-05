@@ -62,4 +62,21 @@ export class KafkaEventLogger {
       error.stack
     );
   }
+
+  logConsumerStartFailed(params: {
+    topics: string[];
+    retryInMs: number;
+    error: unknown;
+  }): void {
+    const error = params.error instanceof Error ? params.error : new Error(String(params.error));
+
+    this.logger.warn(
+      {
+        message: "Kafka consumer startup failed",
+        topics: params.topics,
+        retryInMs: params.retryInMs,
+        errorMessage: error.message
+      }
+    );
+  }
 }

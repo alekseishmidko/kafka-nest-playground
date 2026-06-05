@@ -68,6 +68,19 @@ export interface PaymentFailedPayload {
 
 export type PaymentFailedEvent = EventEnvelope<PaymentFailedPayload, "PaymentFailed">;
 
+export interface NotificationCommandPayload {
+  notificationId: string;
+  recipient: string;
+  channel: "email" | "push" | "webhook";
+  template: string;
+  dataJson: string;
+}
+
+export type NotificationCommandEvent = EventEnvelope<
+  NotificationCommandPayload,
+  "NotificationCommand"
+>;
+
 export interface DeadLetterPayload {
   originalTopic: KafkaTopicName;
   originalPartition: number;
@@ -85,6 +98,7 @@ export type DomainEvent =
   | OrderRiskRejectedEvent
   | PaymentAuthorizedEvent
   | PaymentFailedEvent
+  | NotificationCommandEvent
   | DeadLetterEvent;
 
 export const EVENT_TOPIC_MAP = {
@@ -93,6 +107,7 @@ export const EVENT_TOPIC_MAP = {
   OrderRiskRejected: KAFKA_TOPICS.riskRiskEvents,
   PaymentAuthorized: KAFKA_TOPICS.paymentPaymentEvents,
   PaymentFailed: KAFKA_TOPICS.paymentPaymentEvents,
+  NotificationCommand: KAFKA_TOPICS.notificationNotificationCommands,
   DeadLetterEvent: KAFKA_TOPICS.deadLetterEvents
 } as const;
 
@@ -104,5 +119,6 @@ export const EVENT_SCHEMA_SUBJECTS = {
   OrderRiskRejected: `${EVENT_TOPIC_MAP.OrderRiskRejected}-OrderRiskRejected-value`,
   PaymentAuthorized: `${EVENT_TOPIC_MAP.PaymentAuthorized}-PaymentAuthorized-value`,
   PaymentFailed: `${EVENT_TOPIC_MAP.PaymentFailed}-PaymentFailed-value`,
+  NotificationCommand: `${EVENT_TOPIC_MAP.NotificationCommand}-NotificationCommand-value`,
   DeadLetterEvent: `${EVENT_TOPIC_MAP.DeadLetterEvent}-DeadLetterEvent-value`
 } as const satisfies Record<DomainEventType, string>;
