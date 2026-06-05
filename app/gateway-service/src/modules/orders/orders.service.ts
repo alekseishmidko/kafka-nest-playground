@@ -4,19 +4,10 @@ import { PinoLogger } from "@kafka-playground/observability";
 import { lastValueFrom, Observable } from "rxjs";
 import { ORDERS_GRPC_CLIENT } from "../../grpc/grpc-clients.constants";
 import type { CreateOrderDto } from "./dto/create-order.dto";
-
-export interface CreateOrderResponse {
-  id: string;
-  status: string;
-  userId: string;
-  currency: string;
-  totalAmount: number;
-  itemCount: number;
-  createdAt: string;
-}
+import type { OrderResponseDto } from "./dto/order-response.dto";
 
 interface OrdersGrpcService {
-  createOrder(payload: CreateOrderDto): Observable<CreateOrderResponse>;
+  createOrder(payload: CreateOrderDto): Observable<OrderResponseDto>;
 }
 
 @Injectable()
@@ -35,7 +26,7 @@ export class OrdersService implements OnModuleInit {
       this.client.getService<OrdersGrpcService>("OrdersService");
   }
 
-  async createOrder(dto: CreateOrderDto) {
+  async createOrder(dto: CreateOrderDto): Promise<OrderResponseDto> {
     this.logger.info(
       {
         userId: dto.userId,
