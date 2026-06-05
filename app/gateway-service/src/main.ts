@@ -4,6 +4,7 @@ import { NestFactory } from "@nestjs/core";
 import { Logger } from "@kafka-playground/observability";
 import { logServiceStarted } from "@kafka-playground/observability";
 import { AppModule } from "./app.module";
+import { setupSwagger } from "./config/swagger.config";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -18,6 +19,7 @@ async function bootstrap() {
       whitelist: true
     })
   );
+  setupSwagger(app);
 
   const port = Number(config.getOrThrow<string>("PORT"));
   const host = config.getOrThrow<string>("HOST");
