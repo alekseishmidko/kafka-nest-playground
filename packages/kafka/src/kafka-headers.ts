@@ -1,5 +1,5 @@
 import type { DomainEvent } from "@kafka-playground/contracts";
-import type { KafkaHeaders } from "./types";
+import type { KafkaHeaderInput, KafkaHeaders } from "./types";
 
 export const KAFKA_HEADER_NAMES = {
   correlationId: "x-correlation-id",
@@ -11,16 +11,16 @@ export const KAFKA_HEADER_NAMES = {
 
 export function buildKafkaHeaders(
   event: DomainEvent,
-  extraHeaders: KafkaHeaders = {}
+  extraHeaders: KafkaHeaderInput = {}
 ): KafkaHeaders {
-  return {
+  return compactHeaders({
     ...extraHeaders,
     [KAFKA_HEADER_NAMES.correlationId]: event.correlationId,
     [KAFKA_HEADER_NAMES.causationId]: event.causationId ?? undefined,
     [KAFKA_HEADER_NAMES.eventId]: event.eventId,
     [KAFKA_HEADER_NAMES.eventType]: event.eventType,
     [KAFKA_HEADER_NAMES.eventVersion]: String(event.eventVersion)
-  };
+  });
 }
 
 export function readHeader(headers: KafkaHeaders | undefined, name: string): string | undefined {
@@ -35,4 +35,13 @@ export function readHeader(headers: KafkaHeaders | undefined, name: string): str
   }
 
   return undefined;
+}
+
+export function compactHeaders(headers: KafkaHeaderInput): KafkaHeaders {
+  return Object.fromEntries(
+    Object.entries(headers).filter((entry): entry is [string, string | Buffer] => {
+      const value = entry[1];
+      return value !== undefined;
+    })
+  );
 }

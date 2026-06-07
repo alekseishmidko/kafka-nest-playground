@@ -67,9 +67,8 @@ function normalizeHeaders(headers: IHeaders | undefined): KafkaHeaders | undefin
   }
 
   return Object.fromEntries(
-    Object.entries(headers).map(([key, value]) => [
-      key,
-      Array.isArray(value) ? value[0] : value
-    ])
+    Object.entries(headers)
+      .map(([key, value]) => [key, Array.isArray(value) ? value[0] : value] as const)
+      .filter((entry): entry is readonly [string, string | Buffer] => entry[1] !== undefined)
   );
 }
