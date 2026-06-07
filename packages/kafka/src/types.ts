@@ -1,6 +1,8 @@
 import type { DomainEvent, KafkaTopicName } from "@kafka-playground/contracts";
 
-export type KafkaHeaders = Record<string, string | Buffer | undefined>;
+export type KafkaHeaderValue = string | Buffer;
+export type KafkaHeaders = Record<string, KafkaHeaderValue>;
+export type KafkaHeaderInput = Record<string, KafkaHeaderValue | undefined>;
 
 export interface KafkaModuleOptions {
   clientId: string;
@@ -21,7 +23,7 @@ export interface KafkaProducerClientMessage {
 export interface KafkaProducerClientMessageItem {
   key: string;
   value: Buffer;
-  headers?: KafkaHeaders;
+  headers?: KafkaHeaderInput;
 }
 
 export interface KafkaProducerRecordMetadata {

@@ -10,7 +10,6 @@
     "dev:payment": "pnpm --filter payment-service dev",
     "dev:notification": "pnpm --filter notification-service dev",
     "dev:risk": "pnpm --filter risk-service dev",
-    "dev:risk-service": "pnpm --filter risk-service dev",
     "dev:risk-service-go": "cd app/risk-service-go && go run ./cmd/risk-service",
     "start": "pnpm --filter gateway-service start",
     "start:gateway": "pnpm --filter gateway-service start",
