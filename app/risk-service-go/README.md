@@ -45,5 +45,8 @@ go run ./cmd/risk-service
 
 Health endpoints:
 
-- `GET /healthz`
-- `GET /readyz`
+- `GET http://localhost:3002/healthz`
+- `GET http://localhost:3002/readyz`
+
+После успешного bind сервис пишет structured startup log с полями `host`,
+`port`, `address`, `healthUrl` и `readinessUrl`.

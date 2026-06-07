@@ -8,12 +8,13 @@ import { join } from "node:path";
 import { AppModule } from "./app.module";
 
 async function bootstrap() {
+  const grpcUrl = process.env.ORDER_GRPC_URL ?? "0.0.0.0:50052";
   const app = await NestFactory.createMicroservice<MicroserviceOptions>(AppModule, {
     transport: Transport.GRPC,
     options: {
       package: "orders",
       protoPath: join(process.cwd(), "../../packages/contracts/proto/orders.proto"),
-      url: process.env.ORDER_GRPC_URL ?? "0.0.0.0:50052"
+      url: grpcUrl
     }
   });
   const config = app.get(ConfigService);
@@ -31,8 +32,9 @@ async function bootstrap() {
   await app.listen();
   logServiceStarted(logger, {
     serviceName: "order-service",
+    transport: "grpc",
     environment: config.getOrThrow<string>("APP_ENV"),
-    grpcUrl: config.getOrThrow<string>("ORDER_GRPC_URL")
+    grpcUrl
   });
 }
 

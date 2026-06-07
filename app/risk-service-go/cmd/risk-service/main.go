@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -28,8 +30,6 @@ func main() {
 	logger.Info("starting service",
 		"service", "risk-service-go",
 		"environment", cfg.AppEnv,
-		"host", cfg.Host,
-		"port", cfg.Port,
 		"kafkaBrokers", cfg.KafkaBrokers,
 	)
 
@@ -51,11 +51,37 @@ func main() {
 		Handler:           healthHandler(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
+	listener, err := net.Listen("tcp", httpServer.Addr)
+	if err != nil {
+		logger.Error("failed to start health HTTP server",
+			"service", "risk-service-go",
+			"host", cfg.Host,
+			"port", cfg.Port,
+			"error", err,
+		)
+		os.Exit(1)
+	}
+	boundPort := listener.Addr().(*net.TCPAddr).Port
+	publicHost := cfg.Host
+	if publicHost == "0.0.0.0" {
+		publicHost = "localhost"
+	}
+	publicAddress := net.JoinHostPort(publicHost, fmt.Sprint(boundPort))
+	logger.Info("service started",
+		"service", "risk-service-go",
+		"environment", cfg.AppEnv,
+		"transport", "http+worker",
+		"host", cfg.Host,
+		"port", boundPort,
+		"address", listener.Addr().String(),
+		"healthUrl", "http://"+publicAddress+"/healthz",
+		"readinessUrl", "http://"+publicAddress+"/readyz",
+	)
 
 	errs := make(chan error, 2)
 	go func() {
 		// Health HTTP-сервер работает параллельно с Kafka consumer loop.
-		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := httpServer.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errs <- err
 		}
 	}()

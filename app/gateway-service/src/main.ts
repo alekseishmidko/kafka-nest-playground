@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 import { Logger } from "@kafka-playground/observability";
 import { logServiceStarted } from "@kafka-playground/observability";
+import type { AddressInfo } from "node:net";
 import { AppModule } from "./app.module";
 import { setupSwagger } from "./config/swagger.config";
 
@@ -25,11 +26,19 @@ async function bootstrap() {
   const host = config.getOrThrow<string>("HOST");
 
   await app.listen(port, host);
+  const address = app.getHttpServer().address() as AddressInfo | null;
+  const boundPort = address?.port ?? port;
+  const publicHost = host === "0.0.0.0" ? "localhost" : host;
+  const url = `http://${publicHost}:${boundPort}`;
+
   logServiceStarted(logger, {
     serviceName: "gateway-service",
+    transport: "http",
     host,
-    port,
-    environment: config.getOrThrow<string>("APP_ENV")
+    port: boundPort,
+    environment: config.getOrThrow<string>("APP_ENV"),
+    url,
+    docsUrl: `${url}/docs`
   });
 }
 

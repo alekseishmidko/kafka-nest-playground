@@ -14,6 +14,7 @@ async function bootstrap() {
 
   logServiceStarted(logger, {
     serviceName: "risk-service",
+    transport: "worker",
     environment: config.getOrThrow<string>("APP_ENV")
   });
 }
