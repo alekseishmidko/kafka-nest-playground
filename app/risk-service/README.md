@@ -181,12 +181,9 @@ pnpm --filter risk-service build
 ## Runtime
 
 `risk-service` is a background Kafka worker. It does not expose HTTP endpoints.
+Startup-лог содержит `transport=worker`; application port отсутствует.
 
-Локальный адрес по умолчанию:
-
-```text
-http://localhost:3002
-```
+Порт `3002` использует только Go-реализация `risk-service-go` для health endpoints.
 
 ## Детали Реализации
 

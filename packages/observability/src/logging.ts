@@ -79,24 +79,28 @@ export function getHeader(request: IncomingMessage, name: string): string | unde
 }
 
 export function logServiceStarted(
-  logger: { log(message: string, context?: string): void },
+  logger: { log(message: unknown, context?: string): void },
   params: {
     serviceName: string;
+    transport: "http" | "grpc" | "worker";
     host?: string;
     port?: number;
     environment: string;
+    url?: string;
+    docsUrl?: string;
     grpcUrl?: string;
   }
 ): void {
-  logger.log(
-    JSON.stringify({
-      message: "Service started",
-      service: params.serviceName,
-      host: params.host,
-      port: params.port,
-      environment: params.environment,
-      grpcUrl: params.grpcUrl
-    }),
-    "Bootstrap"
-  );
+  logger.log({
+    message: "Service started",
+    service: params.serviceName,
+    transport: params.transport,
+    host: params.host,
+    port: params.port,
+    environment: params.environment,
+    url: params.url,
+    docsUrl: params.docsUrl,
+    grpcUrl: params.grpcUrl,
+    context: "Bootstrap"
+  });
 }

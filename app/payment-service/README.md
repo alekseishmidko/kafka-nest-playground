@@ -102,3 +102,4 @@ pnpm --filter payment-service build
 ## Runtime
 
 `payment-service` is a background Kafka worker. It does not expose HTTP endpoints.
+The startup log identifies it with `transport=worker`; there is no application port.

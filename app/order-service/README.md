@@ -34,6 +34,14 @@ Kafka key is `orderId` for order/risk/payment topics.
 
 `order-service` does not expose HTTP. It runs as a gRPC server and consumes Kafka events.
 
+Default gRPC bind address:
+
+```text
+0.0.0.0:50052
+```
+
+The address is written to the startup log as `grpcUrl`.
+
 ## Configuration
 
 `order-service` needs a gRPC bind URL plus producer and consumer Kafka clients:
