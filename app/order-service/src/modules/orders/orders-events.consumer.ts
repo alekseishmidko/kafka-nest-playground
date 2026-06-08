@@ -31,19 +31,21 @@ export class OrdersEventsConsumer implements OnModuleInit {
       {
         topics: [EVENT_TOPIC_MAP.OrderRiskApproved, EVENT_TOPIC_MAP.PaymentAuthorized]
       },
-      async ({ event }) => {
+      async ({ event, topic, offset }) => {
+        const source = { topic, offset };
+
         switch (event.eventType) {
           case "OrderRiskApproved":
-            await this.ordersService.handleOrderRiskApproved(event);
+            await this.ordersService.handleOrderRiskApproved(event, source);
             return;
           case "OrderRiskRejected":
-            await this.ordersService.handleOrderRiskRejected(event);
+            await this.ordersService.handleOrderRiskRejected(event, source);
             return;
           case "PaymentAuthorized":
-            await this.ordersService.handlePaymentAuthorized(event);
+            await this.ordersService.handlePaymentAuthorized(event, source);
             return;
           case "PaymentFailed":
-            await this.ordersService.handlePaymentFailed(event);
+            await this.ordersService.handlePaymentFailed(event, source);
             return;
         }
       }
