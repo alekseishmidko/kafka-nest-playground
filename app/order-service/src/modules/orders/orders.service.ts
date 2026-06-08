@@ -1,24 +1,33 @@
 import { Injectable } from "@nestjs/common";
 import {
-  EVENT_TOPIC_MAP,
+  type DomainEvent,
+  type KafkaTopicName,
   type OrderCreatedEvent,
   type OrderRiskApprovedEvent,
   type OrderRiskRejectedEvent,
   type PaymentAuthorizedEvent,
   type PaymentFailedEvent
 } from "@kafka-playground/contracts";
-import { KafkaProducerService } from "@kafka-playground/kafka";
 import { randomUUID } from "node:crypto";
 import { PinoLogger } from "@kafka-playground/observability";
 import type { CreateOrderDto } from "./dto/create-order.dto";
 import { OrderStatus } from "./entities/order.entity";
-import { OrdersRepository } from "./orders.repository";
+import { OutboxPublisherService } from "./outbox-publisher.service";
+import {
+  OrderStatusUpdateResult,
+  OrdersRepository
+} from "./orders.repository";
+
+export interface KafkaEventSource {
+  topic: KafkaTopicName;
+  offset: string;
+}
 
 @Injectable()
 export class OrdersService {
   constructor(
     private readonly ordersRepository: OrdersRepository,
-    private readonly kafkaProducer: KafkaProducerService,
+    private readonly outboxPublisher: OutboxPublisherService,
     private readonly logger: PinoLogger
   ) {
     this.logger.setContext(OrdersService.name);
@@ -40,12 +49,28 @@ export class OrdersService {
     );
     const itemCount = dto.items.reduce((sum, item) => sum + item.quantity, 0);
 
-    const order = await this.ordersRepository.createPendingOrder({
+    const { order, event } = await this.ordersRepository.createPendingOrderWithOutbox({
       userId: dto.userId,
       currency: dto.currency,
       totalAmount,
       itemCount,
-      items: dto.items
+      items: dto.items,
+      createEvent: (savedOrder): OrderCreatedEvent => ({
+        eventId: randomUUID(),
+        eventType: "OrderCreated",
+        eventVersion: 1,
+        occurredAt: new Date().toISOString(),
+        correlationId: randomUUID(),
+        causationId: null,
+        producer: "order-service",
+        payload: {
+          orderId: savedOrder.id,
+          userId: savedOrder.userId,
+          currency: savedOrder.currency,
+          totalAmount,
+          itemCount
+        }
+      })
     });
 
     this.logger.info(
@@ -58,57 +83,19 @@ export class OrdersService {
       "Pending order persisted"
     );
 
-    const event: OrderCreatedEvent = {
-      eventId: randomUUID(),
-      eventType: "OrderCreated",
-      eventVersion: 1,
-      occurredAt: new Date().toISOString(),
-      correlationId: randomUUID(),
-      causationId: null,
-      producer: "order-service",
-      payload: {
+    this.logger.info(
+      {
         orderId: order.id,
-        userId: order.userId,
-        currency: order.currency,
-        totalAmount,
-        itemCount
-      }
-    };
+        eventId: event.eventId,
+        eventType: event.eventType,
+        correlationId: event.correlationId
+      },
+      "OrderCreated event queued in outbox"
+    );
 
-    // Publishes the domain event to Kafka and starts the async order pipeline.
-    // Any service subscribed to order.order-events can react independently:
-    // risk-service-go can run fraud scoring, analytics-service-go can update
-    // projections, and notification-service can trigger user-facing messages.
-    try {
-      await this.kafkaProducer.publish({
-        topic: EVENT_TOPIC_MAP.OrderCreated,
-        key: order.id,
-        event
-      });
-
-      this.logger.info(
-        {
-          orderId: order.id,
-          eventId: event.eventId,
-          eventType: event.eventType,
-          topic: EVENT_TOPIC_MAP.OrderCreated,
-          correlationId: event.correlationId
-        },
-        "OrderCreated event published"
-      );
-    } catch (error) {
-      this.logger.warn(
-        {
-          orderId: order.id,
-          eventId: event.eventId,
-          eventType: event.eventType,
-          topic: EVENT_TOPIC_MAP.OrderCreated,
-          correlationId: event.correlationId,
-          error
-        },
-        "OrderCreated event publish failed; order remains pending"
-      );
-    }
+    // This is only a fast path. Durability comes from the persisted outbox row,
+    // so the interval publisher can still recover the event if this call fails.
+    void this.outboxPublisher.publishPending();
 
     return {
       id: order.id,
@@ -121,23 +108,27 @@ export class OrdersService {
     };
   }
 
-  async handleOrderRiskApproved(event: OrderRiskApprovedEvent): Promise<void> {
+  async handleOrderRiskApproved(
+    event: OrderRiskApprovedEvent,
+    source: KafkaEventSource
+  ): Promise<void> {
     await this.updateOrderStatus(
       event.payload.orderId,
       OrderStatus.RiskApproved,
-      event.eventType,
-      event.eventId,
-      event.correlationId
+      event,
+      source
     );
   }
 
-  async handleOrderRiskRejected(event: OrderRiskRejectedEvent): Promise<void> {
+  async handleOrderRiskRejected(
+    event: OrderRiskRejectedEvent,
+    source: KafkaEventSource
+  ): Promise<void> {
     await this.updateOrderStatus(
       event.payload.orderId,
       OrderStatus.RiskRejected,
-      event.eventType,
-      event.eventId,
-      event.correlationId,
+      event,
+      source,
       {
         reason: event.payload.reason,
         riskScore: event.payload.riskScore
@@ -145,13 +136,15 @@ export class OrdersService {
     );
   }
 
-  async handlePaymentAuthorized(event: PaymentAuthorizedEvent): Promise<void> {
+  async handlePaymentAuthorized(
+    event: PaymentAuthorizedEvent,
+    source: KafkaEventSource
+  ): Promise<void> {
     await this.updateOrderStatus(
       event.payload.orderId,
       OrderStatus.PaymentAuthorized,
-      event.eventType,
-      event.eventId,
-      event.correlationId,
+      event,
+      source,
       {
         paymentId: event.payload.paymentId,
         provider: event.payload.provider
@@ -159,13 +152,15 @@ export class OrdersService {
     );
   }
 
-  async handlePaymentFailed(event: PaymentFailedEvent): Promise<void> {
+  async handlePaymentFailed(
+    event: PaymentFailedEvent,
+    source: KafkaEventSource
+  ): Promise<void> {
     await this.updateOrderStatus(
       event.payload.orderId,
       OrderStatus.PaymentFailed,
-      event.eventType,
-      event.eventId,
-      event.correlationId,
+      event,
+      source,
       {
         paymentId: event.payload.paymentId,
         provider: event.payload.provider,
@@ -177,21 +172,45 @@ export class OrdersService {
   private async updateOrderStatus(
     orderId: string,
     status: OrderStatus,
-    eventType: string,
-    eventId: string,
-    correlationId: string,
+    event: DomainEvent,
+    source: KafkaEventSource,
     details: Record<string, unknown> = {}
   ): Promise<void> {
-    const updated = await this.ordersRepository.updateStatus(orderId, status);
+    const result = await this.ordersRepository.updateStatusFromEvent({
+      orderId,
+      status,
+      event,
+      sourceTopic: source.topic,
+      sourceOffset: source.offset
+    });
 
-    if (!updated) {
+    if (result === OrderStatusUpdateResult.DuplicateEvent) {
+      this.logger.info(
+        {
+          orderId,
+          status,
+          eventType: event.eventType,
+          eventId: event.eventId,
+          correlationId: event.correlationId,
+          sourceTopic: source.topic,
+          sourceOffset: source.offset,
+          ...details
+        },
+        "Duplicate order status event skipped"
+      );
+      return;
+    }
+
+    if (result === OrderStatusUpdateResult.UnknownOrder) {
       this.logger.warn(
         {
           orderId,
           status,
-          eventType,
-          eventId,
-          correlationId,
+          eventType: event.eventType,
+          eventId: event.eventId,
+          correlationId: event.correlationId,
+          sourceTopic: source.topic,
+          sourceOffset: source.offset,
           ...details
         },
         "Order status event received for unknown order"
@@ -203,9 +222,11 @@ export class OrdersService {
       {
         orderId,
         status,
-        eventType,
-        eventId,
-        correlationId,
+        eventType: event.eventType,
+        eventId: event.eventId,
+        correlationId: event.correlationId,
+        sourceTopic: source.topic,
+        sourceOffset: source.offset,
         ...details
       },
       "Order status updated from domain event"
