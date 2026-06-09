@@ -23,6 +23,9 @@
     "infra:config": "docker compose --project-directory infrastructure --env-file infrastructure/.env -f infrastructure/docker-compose.yml config",
     "contracts:schemas:register": "pnpm --filter @kafka-playground/contracts schemas:register",
     "test:e2e:order-pipeline": "pnpm --filter @kafka-playground/testing test:e2e:order-pipeline",
+    "test:e2e:outbox": "pnpm --filter @kafka-playground/testing test:e2e:outbox",
+    "test:e2e:outbox-failure": "pnpm --filter @kafka-playground/testing test:e2e:outbox-failure",
+    "test:e2e:idempotency": "pnpm --filter @kafka-playground/testing test:e2e:idempotency",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test"

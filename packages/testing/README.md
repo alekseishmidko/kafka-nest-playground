@@ -36,3 +36,52 @@ E2E_POSTGRES_PASSWORD=postgres \
 E2E_POSTGRES_DB=kafka_playground \
 pnpm test:e2e:order-pipeline
 ```
+
+## Transactional Outbox E2E
+
+Happy-path проверка создаёт заказ и подтверждает три независимых факта:
+
+- запись `OrderCreated` существует в `outbox_events`;
+- publisher перевёл её в `PUBLISHED`;
+- событие с тем же `eventId` реально прочитано из Kafka.
+
+```bash
+pnpm test:e2e:outbox
+```
+
+Failure-проверка останавливает Kafka через Docker Compose, создаёт заказ,
+дожидается `FAILED`, восстанавливает Kafka и проверяет переход в `PUBLISHED`:
+
+```bash
+pnpm test:e2e:outbox-failure
+```
+
+Тест всегда пытается поднять Kafka обратно в `finally`, но требует доступ к
+локальному Docker daemon. Во время выполнения не запускайте параллельно другие
+сценарии, которым нужна Kafka.
+
+Проверка идемпотентности дважды публикует одно событие `PaymentAuthorized` с
+одинаковым `eventId` и подтверждает, что:
+
+- в `processed_kafka_events` появилась ровно одна строка;
+- статус заказа обновился;
+- повторная доставка не изменила `orders.updatedAt`.
+
+```bash
+pnpm test:e2e:idempotency
+```
+
+Общие настройки:
+
+```env
+E2E_GATEWAY_URL=http://localhost:3000
+E2E_KAFKA_BROKERS=localhost:9092
+E2E_SCHEMA_REGISTRY_URL=http://localhost:8081
+E2E_POSTGRES_HOST=localhost
+E2E_POSTGRES_PORT=55432
+E2E_POSTGRES_USER=postgres
+E2E_POSTGRES_PASSWORD=postgres
+E2E_POSTGRES_DB=kafka_playground
+E2E_TIMEOUT_MS=60000
+E2E_POLL_INTERVAL_MS=500
+```

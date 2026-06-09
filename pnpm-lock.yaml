@@ -390,6 +390,12 @@ importers:
 
   packages/testing:
     dependencies:
+      '@kafkajs/confluent-schema-registry':
+        specifier: ^4.1.0
+        version: 4.1.0
+      kafkajs:
+        specifier: ^2.2.4
+        version: 2.2.4
       pg:
         specifier: ^8.21.0
         version: 8.21.0

@@ -7,9 +7,14 @@
     "build": "echo \"No build configured\"",
     "lint": "echo \"No lint configured\"",
     "test": "echo \"No tests configured\"",
-    "test:e2e:order-pipeline": "node scripts/order-pipeline.e2e.mjs"
+    "test:e2e:order-pipeline": "node scripts/order-pipeline.e2e.mjs",
+    "test:e2e:outbox": "node scripts/outbox-publish.e2e.mjs",
+    "test:e2e:outbox-failure": "node scripts/outbox-kafka-failure.e2e.mjs",
+    "test:e2e:idempotency": "node scripts/order-consumer-idempotency.e2e.mjs"
   },
   "dependencies": {
+    "@kafkajs/confluent-schema-registry": "^4.1.0",
+    "kafkajs": "^2.2.4",
     "pg": "^8.21.0"
   }
 }
