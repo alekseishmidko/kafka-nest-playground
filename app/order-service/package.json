@@ -8,6 +8,8 @@
     "build": "pnpm --filter @kafka-playground/config build && pnpm --filter @kafka-playground/contracts build && pnpm --filter @kafka-playground/kafka build && pnpm --filter @kafka-playground/observability build && nest build",
     "start": "node dist/main.js",
     "start:prod": "node dist/main.js",
+    "migration:run": "pnpm build && typeorm migration:run -d dist/database/order-service.data-source.js",
+    "migration:revert": "pnpm build && typeorm migration:revert -d dist/database/order-service.data-source.js",
     "prelint": "pnpm --filter @kafka-playground/config build && pnpm --filter @kafka-playground/contracts build && pnpm --filter @kafka-playground/kafka build && pnpm --filter @kafka-playground/observability build",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "echo \"No tests configured\""

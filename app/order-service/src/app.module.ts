@@ -8,6 +8,7 @@ import {
   KafkaModule
 } from "@kafka-playground/kafka";
 import { createServiceLoggerModule } from "@kafka-playground/observability";
+import { createOrderServiceDataSourceOptions } from "./database/order-service.data-source";
 import { OrdersModule } from "./modules/orders/orders.module";
 import { join } from "node:path";
 
@@ -24,21 +25,7 @@ loadServiceEnvFiles(join(process.cwd()));
       envFilePath: getServiceEnvFilePaths(join(process.cwd()))
     }),
     TypeOrmModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: "postgres",
-        host: config.getOrThrow<string>("POSTGRES_HOST"),
-        port: Number(config.getOrThrow<string>("POSTGRES_PORT")),
-        username: config.getOrThrow<string>("POSTGRES_USER"),
-        password: config.getOrThrow<string>("POSTGRES_PASSWORD"),
-        database: config.getOrThrow<string>("POSTGRES_DB"),
-        autoLoadEntities: true,
-        synchronize: config.getOrThrow<string>("TYPEORM_SYNCHRONIZE") === "true",
-        ssl:
-          config.getOrThrow<string>("POSTGRES_SSL") === "true"
-            ? { rejectUnauthorized: false }
-            : false
-      })
+      useFactory: () => createOrderServiceDataSourceOptions()
     }),
     KafkaModule.registerAsync({
       inject: [ConfigService],
