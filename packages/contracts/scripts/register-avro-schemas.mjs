@@ -13,6 +13,14 @@ const schemas = [
     fileName: "order-created.v1.avsc"
   },
   {
+    subject: "order.order-events-OrderConfirmed-value",
+    fileName: "order-confirmed.v1.avsc"
+  },
+  {
+    subject: "order.order-events-OrderCancelled-value",
+    fileName: "order-cancelled.v1.avsc"
+  },
+  {
     subject: "risk.risk-events-OrderRiskApproved-value",
     fileName: "order-risk-approved.v1.avsc"
   },

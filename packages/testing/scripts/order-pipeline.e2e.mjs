@@ -19,11 +19,7 @@ const config = {
   pollIntervalMs: Number(readEnv("E2E_ORDER_PIPELINE_POLL_INTERVAL_MS", "500"))
 };
 
-const finalStatuses = new Set([
-  "RISK_REJECTED",
-  "PAYMENT_AUTHORIZED",
-  "PAYMENT_FAILED"
-]);
+const finalStatuses = new Set(["CONFIRMED", "CANCELLED"]);
 
 async function main() {
   assertPositiveNumber(config.postgres.port, "E2E_POSTGRES_PORT");
@@ -56,7 +52,7 @@ async function main() {
     console.log(
       json({
         ok: true,
-        flow: "order -> risk -> payment -> order",
+        flow: "order -> risk -> payment -> confirmed/cancelled",
         orderId: order.id,
         initialStatus: order.status,
         finalStatus: finalOrder.status,

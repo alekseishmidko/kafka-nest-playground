@@ -5,6 +5,7 @@ import { OrderEntity } from "../modules/orders/entities/order.entity";
 import { OutboxEventEntity } from "../modules/orders/entities/outbox-event.entity";
 import { ProcessedKafkaEventEntity } from "../modules/orders/entities/processed-kafka-event.entity";
 import { CreateOrderServiceSchema1717977600000 } from "./migrations/1717977600000-create-order-service-schema";
+import { AddFinalOrderStatuses1718064000000 } from "./migrations/1718064000000-add-final-order-statuses";
 
 loadServiceEnvFiles(join(process.cwd()));
 
@@ -29,7 +30,10 @@ export function createOrderServiceDataSourceOptions(): DataSourceOptions {
     synchronize: false,
     migrationsRun: readBooleanEnv("TYPEORM_MIGRATIONS_RUN", true),
     entities: [OrderEntity, OutboxEventEntity, ProcessedKafkaEventEntity],
-    migrations: [CreateOrderServiceSchema1717977600000]
+    migrations: [
+      CreateOrderServiceSchema1717977600000,
+      AddFinalOrderStatuses1718064000000
+    ]
   };
 }
 

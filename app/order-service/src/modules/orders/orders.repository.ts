@@ -3,12 +3,20 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import {
   EVENT_TOPIC_MAP,
-  type OrderCreatedEvent,
-  type DomainEvent,
-  type KafkaTopicName
+  type KafkaTopicName,
+  type OrderCreatedEvent
 } from "@kafka-playground/contracts";
 import { OutboxEventEntity, OutboxEventStatus } from "./entities/outbox-event.entity";
 import { OrderEntity, OrderStatus, type OrderItemSnapshot } from "./entities/order.entity";
+import {
+  createFinalOrderEvent,
+  type FinalOrderEvent,
+  type FinalOrderSourceEvent
+} from "./order-final-event.factory";
+import {
+  decideOrderTransition,
+  type OrderLifecycleEvent
+} from "./order-state-machine";
 
 export interface CreatePendingOrderParams {
   userId: string;
@@ -29,27 +37,35 @@ export interface CreatePendingOrderWithOutboxParams extends CreatePendingOrderPa
 }
 
 /**
- * Параметры идемпотентного обновления заказа из входящего Kafka-события.
+ * Параметры идемпотентной обработки lifecycle-события заказа.
  */
-export interface UpdateStatusFromEventParams {
+export interface ProcessLifecycleEventParams {
   orderId: string;
-  status: OrderStatus;
-  event: DomainEvent;
+  event: OrderLifecycleEvent;
   sourceTopic: KafkaTopicName;
   sourceOffset: string;
 }
 
 /**
- * Результат обработки входящего события статуса заказа.
+ * Результат транзакционной обработки входящего lifecycle-события.
  */
-export enum OrderStatusUpdateResult {
-  /** Статус заказа обновлён, событие обработано впервые. */
-  Updated = "UPDATED",
-  /** Такой `eventId` уже был обработан, бизнес-логику повторять нельзя. */
-  DuplicateEvent = "DUPLICATE_EVENT",
-  /** Событие валидное, но заказ с таким id не найден. */
-  UnknownOrder = "UNKNOWN_ORDER"
-}
+export type OrderLifecycleProcessingResult =
+  | {
+      outcome: "APPLIED";
+      previousStatus: OrderStatus;
+      status: OrderStatus;
+      finalEvent: FinalOrderEvent | null;
+    }
+  | {
+      outcome: "DUPLICATE_EVENT";
+    }
+  | {
+      outcome: "UNKNOWN_ORDER";
+    }
+  | {
+      outcome: "INVALID_TRANSITION";
+      currentStatus: OrderStatus;
+    };
 
 @Injectable()
 export class OrdersRepository {
@@ -111,22 +127,25 @@ export class OrdersRepository {
     });
   }
 
-  async updateStatus(orderId: string, status: OrderStatus): Promise<boolean> {
-    const result = await this.repository.update({ id: orderId }, { status });
-
-    return (result.affected ?? 0) > 0;
-  }
-
   /**
-   * Идемпотентно применяет входящее Kafka-событие к заказу.
+   * Идемпотентно применяет lifecycle-событие и при необходимости создаёт
+   * финальное событие в transactional outbox.
    *
-   * Сначала вставляем `eventId` в `processed_kafka_events`. Если insert ничего
-   * не вставил из-за unique conflict, значит событие уже применялось раньше и
-   * повторное изменение статуса нужно пропустить.
+   * Вся последовательность выполняется в одной PostgreSQL-транзакции:
+   *
+   * 1. Регистрируем входной `eventId`.
+   * 2. Блокируем строку заказа через `pessimistic_write`.
+   * 3. Проверяем переход чистой state machine.
+   * 4. Обновляем статус.
+   * 5. Сохраняем `OrderConfirmed`/`OrderCancelled` в outbox.
+   *
+   * Row lock сериализует разные события одного заказа. Без него два consumer
+   * callback-а могли бы одновременно прочитать старый статус и оба принять
+   * несовместимые решения.
    */
-  async updateStatusFromEvent(
-    params: UpdateStatusFromEventParams
-  ): Promise<OrderStatusUpdateResult> {
+  async processLifecycleEvent(
+    params: ProcessLifecycleEventParams
+  ): Promise<OrderLifecycleProcessingResult> {
     return this.repository.manager.transaction(async (manager) => {
       const inserted = await manager.query(
         `
@@ -149,18 +168,90 @@ export class OrdersRepository {
       );
 
       if (inserted.length === 0) {
-        return OrderStatusUpdateResult.DuplicateEvent;
+        return {
+          outcome: "DUPLICATE_EVENT"
+        };
       }
 
-      const result = await manager.update(
-        OrderEntity,
-        { id: params.orderId },
-        { status: params.status }
+      const order = await manager.findOne(OrderEntity, {
+        where: {
+          id: params.orderId
+        },
+        lock: {
+          mode: "pessimistic_write"
+        }
+      });
+
+      if (!order) {
+        return {
+          outcome: "UNKNOWN_ORDER"
+        };
+      }
+
+      const decision = decideOrderTransition(
+        order.status,
+        params.event.eventType
       );
 
-      return (result.affected ?? 0) > 0
-        ? OrderStatusUpdateResult.Updated
-        : OrderStatusUpdateResult.UnknownOrder;
+      if (!decision.allowed) {
+        return {
+          outcome: "INVALID_TRANSITION",
+          currentStatus: order.status
+        };
+      }
+
+      const previousStatus = order.status;
+      order.status = decision.to;
+      const updatedOrder = await manager.save(order);
+      const finalEvent =
+        decision.finalEventType === null
+          ? null
+          : createFinalOrderEvent(
+              updatedOrder,
+              asFinalOrderSourceEvent(params.event)
+            );
+
+      if (finalEvent) {
+        await manager.save(
+          manager.create(OutboxEventEntity, {
+            topic: EVENT_TOPIC_MAP[finalEvent.eventType],
+            messageKey: updatedOrder.id,
+            eventType: finalEvent.eventType,
+            eventId: finalEvent.eventId,
+            event: finalEvent,
+            status: OutboxEventStatus.Pending
+          })
+        );
+      }
+
+      return {
+        outcome: "APPLIED",
+        previousStatus,
+        status: updatedOrder.status,
+        finalEvent
+      };
     });
   }
+}
+
+/**
+ * Сужает lifecycle union до событий, которые действительно завершают заказ.
+ *
+ * Проверка остаётся рядом с транзакционной логикой, поэтому добавление нового
+ * финального перехода потребует явного обновления этого guard-а.
+ */
+function asFinalOrderSourceEvent(
+  event: OrderLifecycleEvent
+): FinalOrderSourceEvent {
+  if (
+    event.eventType === "OrderRiskRejected" ||
+    event.eventType === "PaymentAuthorized" ||
+    event.eventType === "PaymentFailed"
+  ) {
+    return event;
+  }
+
+  throw new Error(
+    `Event ${event.eventType} cannot produce a final order event`
+  );
 }

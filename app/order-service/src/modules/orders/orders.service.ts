@@ -1,6 +1,5 @@
 import { Injectable } from "@nestjs/common";
 import {
-  type DomainEvent,
   type KafkaTopicName,
   type OrderCreatedEvent,
   type OrderRiskApprovedEvent,
@@ -11,12 +10,9 @@ import {
 import { randomUUID } from "node:crypto";
 import { PinoLogger } from "@kafka-playground/observability";
 import type { CreateOrderDto } from "./dto/create-order.dto";
-import { OrderStatus } from "./entities/order.entity";
 import { OutboxPublisherService } from "./outbox-publisher.service";
-import {
-  OrderStatusUpdateResult,
-  OrdersRepository
-} from "./orders.repository";
+import { OrdersRepository } from "./orders.repository";
+import type { OrderLifecycleEvent } from "./order-state-machine";
 
 export interface KafkaEventSource {
   topic: KafkaTopicName;
@@ -112,83 +108,61 @@ export class OrdersService {
     event: OrderRiskApprovedEvent,
     source: KafkaEventSource
   ): Promise<void> {
-    await this.updateOrderStatus(
-      event.payload.orderId,
-      OrderStatus.RiskApproved,
-      event,
-      source
-    );
+    await this.processLifecycleEvent(event, source);
   }
 
   async handleOrderRiskRejected(
     event: OrderRiskRejectedEvent,
     source: KafkaEventSource
   ): Promise<void> {
-    await this.updateOrderStatus(
-      event.payload.orderId,
-      OrderStatus.RiskRejected,
-      event,
-      source,
-      {
-        reason: event.payload.reason,
-        riskScore: event.payload.riskScore
-      }
-    );
+    await this.processLifecycleEvent(event, source, {
+      reason: event.payload.reason,
+      riskScore: event.payload.riskScore
+    });
   }
 
   async handlePaymentAuthorized(
     event: PaymentAuthorizedEvent,
     source: KafkaEventSource
   ): Promise<void> {
-    await this.updateOrderStatus(
-      event.payload.orderId,
-      OrderStatus.PaymentAuthorized,
-      event,
-      source,
-      {
-        paymentId: event.payload.paymentId,
-        provider: event.payload.provider
-      }
-    );
+    await this.processLifecycleEvent(event, source, {
+      paymentId: event.payload.paymentId,
+      provider: event.payload.provider
+    });
   }
 
   async handlePaymentFailed(
     event: PaymentFailedEvent,
     source: KafkaEventSource
   ): Promise<void> {
-    await this.updateOrderStatus(
-      event.payload.orderId,
-      OrderStatus.PaymentFailed,
-      event,
-      source,
-      {
-        paymentId: event.payload.paymentId,
-        provider: event.payload.provider,
-        reason: event.payload.reason
-      }
-    );
+    await this.processLifecycleEvent(event, source, {
+      paymentId: event.payload.paymentId,
+      provider: event.payload.provider,
+      reason: event.payload.reason
+    });
   }
 
-  private async updateOrderStatus(
-    orderId: string,
-    status: OrderStatus,
-    event: DomainEvent,
+  /**
+   * Передаёт событие в транзакционный repository и централизованно логирует
+   * все исходы: применение, дубль, неизвестный заказ и запрещённый переход.
+   */
+  private async processLifecycleEvent(
+    event: OrderLifecycleEvent,
     source: KafkaEventSource,
     details: Record<string, unknown> = {}
   ): Promise<void> {
-    const result = await this.ordersRepository.updateStatusFromEvent({
+    const orderId = event.payload.orderId;
+    const result = await this.ordersRepository.processLifecycleEvent({
       orderId,
-      status,
       event,
       sourceTopic: source.topic,
       sourceOffset: source.offset
     });
 
-    if (result === OrderStatusUpdateResult.DuplicateEvent) {
+    if (result.outcome === "DUPLICATE_EVENT") {
       this.logger.info(
         {
           orderId,
-          status,
           eventType: event.eventType,
           eventId: event.eventId,
           correlationId: event.correlationId,
@@ -201,11 +175,10 @@ export class OrdersService {
       return;
     }
 
-    if (result === OrderStatusUpdateResult.UnknownOrder) {
+    if (result.outcome === "UNKNOWN_ORDER") {
       this.logger.warn(
         {
           orderId,
-          status,
           eventType: event.eventType,
           eventId: event.eventId,
           correlationId: event.correlationId,
@@ -218,10 +191,28 @@ export class OrdersService {
       return;
     }
 
+    if (result.outcome === "INVALID_TRANSITION") {
+      this.logger.warn(
+        {
+          orderId,
+          currentStatus: result.currentStatus,
+          eventType: event.eventType,
+          eventId: event.eventId,
+          correlationId: event.correlationId,
+          sourceTopic: source.topic,
+          sourceOffset: source.offset,
+          ...details
+        },
+        "Invalid order state transition skipped"
+      );
+      return;
+    }
+
     this.logger.info(
       {
         orderId,
-        status,
+        previousStatus: result.previousStatus,
+        status: result.status,
         eventType: event.eventType,
         eventId: event.eventId,
         correlationId: event.correlationId,
@@ -231,5 +222,21 @@ export class OrdersService {
       },
       "Order status updated from domain event"
     );
+
+    if (result.finalEvent) {
+      this.logger.info(
+        {
+          orderId,
+          eventId: result.finalEvent.eventId,
+          eventType: result.finalEvent.eventType,
+          correlationId: result.finalEvent.correlationId
+        },
+        "Final order event queued in outbox"
+      );
+
+      // Вызов ускоряет отправку, но не является гарантией доставки: durable
+      // источником остаётся outbox-запись, сохранённая в одной транзакции.
+      void this.outboxPublisher.publishPending();
+    }
   }
 }

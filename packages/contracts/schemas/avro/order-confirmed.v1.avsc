@@ -1,0 +1,29 @@
+{
+  "type": "record",
+  "name": "OrderConfirmed",
+  "namespace": "kafka_playground.order.events.v1",
+  "fields": [
+    { "name": "eventId", "type": "string" },
+    { "name": "eventType", "type": "string", "default": "OrderConfirmed" },
+    { "name": "eventVersion", "type": "int", "default": 1 },
+    { "name": "occurredAt", "type": "string" },
+    { "name": "correlationId", "type": "string" },
+    { "name": "causationId", "type": ["null", "string"], "default": null },
+    { "name": "producer", "type": "string" },
+    {
+      "name": "payload",
+      "type": {
+        "type": "record",
+        "name": "OrderConfirmedPayload",
+        "fields": [
+          { "name": "orderId", "type": "string" },
+          { "name": "userId", "type": "string" },
+          { "name": "currency", "type": "string" },
+          { "name": "totalAmount", "type": "double" },
+          { "name": "paymentId", "type": "string" },
+          { "name": "confirmedAt", "type": "string" }
+        ]
+      }
+    }
+  ]
+}

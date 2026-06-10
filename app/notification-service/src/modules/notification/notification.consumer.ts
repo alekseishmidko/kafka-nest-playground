@@ -2,9 +2,8 @@ import { Injectable, OnModuleInit } from "@nestjs/common";
 import {
   EVENT_TOPIC_MAP,
   type NotificationCommandEvent,
-  type OrderCreatedEvent,
-  type PaymentAuthorizedEvent,
-  type PaymentFailedEvent
+  type OrderCancelledEvent,
+  type OrderConfirmedEvent
 } from "@kafka-playground/contracts";
 import { KafkaConsumerRunner } from "@kafka-playground/kafka";
 import { PinoLogger } from "@kafka-playground/observability";
@@ -12,10 +11,17 @@ import { NotificationService } from "./notification.service";
 
 type NotificationInputEvent =
   | NotificationCommandEvent
-  | OrderCreatedEvent
-  | PaymentAuthorizedEvent
-  | PaymentFailedEvent;
+  | OrderConfirmedEvent
+  | OrderCancelledEvent;
 
+/**
+ * Подписывает notification-service на явные notification-команды и финальные
+ * события заказа.
+ *
+ * Сервис намеренно не реагирует на `PaymentAuthorized`/`PaymentFailed`: это
+ * технические события payment-домена. Пользовательское уведомление должно
+ * опираться на итоговое решение владельца заказа.
+ */
 @Injectable()
 export class NotificationConsumer implements OnModuleInit {
   constructor(
@@ -31,8 +37,7 @@ export class NotificationConsumer implements OnModuleInit {
       {
         topics: [
           EVENT_TOPIC_MAP.NotificationCommand,
-          EVENT_TOPIC_MAP.OrderCreated,
-          EVENT_TOPIC_MAP.PaymentAuthorized
+          EVENT_TOPIC_MAP.OrderConfirmed
         ]
       },
       async ({ event }) => {
@@ -40,14 +45,11 @@ export class NotificationConsumer implements OnModuleInit {
           case "NotificationCommand":
             await this.notificationService.handleNotificationCommand(event);
             return;
-          case "OrderCreated":
-            await this.notificationService.handleOrderCreated(event);
+          case "OrderConfirmed":
+            await this.notificationService.handleOrderConfirmed(event);
             return;
-          case "PaymentAuthorized":
-            await this.notificationService.handlePaymentAuthorized(event);
-            return;
-          case "PaymentFailed":
-            await this.notificationService.handlePaymentFailed(event);
+          case "OrderCancelled":
+            await this.notificationService.handleOrderCancelled(event);
             return;
         }
       }

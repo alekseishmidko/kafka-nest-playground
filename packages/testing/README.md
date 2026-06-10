@@ -71,6 +71,23 @@ pnpm test:e2e:outbox-failure
 pnpm test:e2e:idempotency
 ```
 
+## Order Lifecycle E2E
+
+Один сценарий проверяет пять правил финальной state machine:
+
+- `PENDING -> RISK_APPROVED -> CONFIRMED`;
+- `PENDING -> CANCELLED` после `OrderRiskRejected`;
+- `RISK_APPROVED -> CANCELLED` после `PaymentFailed`;
+- повтор одного `eventId` не создаёт вторую outbox-запись;
+- событие в неправильном порядке не меняет терминальный статус.
+
+```bash
+pnpm test:e2e:order-lifecycle
+```
+
+Тест напрямую публикует Avro risk/payment events, поэтому не зависит от
+настроек scoring и вероятности отказа mock payment provider.
+
 Общие настройки:
 
 ```env

@@ -38,6 +38,8 @@ packages/contracts/
   schemas/
     avro/
       order-created.v1.avsc
+      order-confirmed.v1.avsc
+      order-cancelled.v1.avsc
       order-risk-approved.v1.avsc
       order-risk-rejected.v1.avsc
       payment-authorized.v1.avsc
