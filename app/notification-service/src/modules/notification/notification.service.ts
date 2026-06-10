@@ -2,9 +2,8 @@ import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type {
   NotificationCommandEvent,
-  OrderCreatedEvent,
-  PaymentAuthorizedEvent,
-  PaymentFailedEvent
+  OrderCancelledEvent,
+  OrderConfirmedEvent
 } from "@kafka-playground/contracts";
 import { PinoLogger } from "@kafka-playground/observability";
 import { NotificationDeliveryService } from "./notification-delivery.service";
@@ -35,53 +34,44 @@ export class NotificationService {
     });
   }
 
-  async handleOrderCreated(event: OrderCreatedEvent): Promise<void> {
+  /**
+   * Отправляет уведомление только после того, как order-service зафиксировал
+   * заказ в терминальном состоянии `CONFIRMED`.
+   */
+  async handleOrderConfirmed(event: OrderConfirmedEvent): Promise<void> {
     await this.delivery.deliver({
-      notificationId: `order-created-${event.payload.orderId}`,
+      notificationId: `order-confirmed-${event.payload.orderId}`,
       recipient: this.defaultRecipient,
       channel: "email",
-      template: "order.created",
+      template: "order.confirmed",
       data: {
         orderId: event.payload.orderId,
         userId: event.payload.userId,
         currency: event.payload.currency,
         totalAmount: event.payload.totalAmount,
-        itemCount: event.payload.itemCount
+        paymentId: event.payload.paymentId,
+        confirmedAt: event.payload.confirmedAt
       },
       correlationId: event.correlationId,
       causationId: event.eventId
     });
   }
 
-  async handlePaymentAuthorized(event: PaymentAuthorizedEvent): Promise<void> {
+  /**
+   * Отправляет уведомление о бизнес-отмене заказа независимо от того, была она
+   * вызвана risk rejection или отказом платёжного провайдера.
+   */
+  async handleOrderCancelled(event: OrderCancelledEvent): Promise<void> {
     await this.delivery.deliver({
-      notificationId: `payment-authorized-${event.payload.orderId}`,
+      notificationId: `order-cancelled-${event.payload.orderId}`,
       recipient: this.defaultRecipient,
       channel: "email",
-      template: "payment.authorized",
+      template: "order.cancelled",
       data: {
         orderId: event.payload.orderId,
-        paymentId: event.payload.paymentId,
-        amount: event.payload.amount,
-        currency: event.payload.currency,
-        provider: event.payload.provider
-      },
-      correlationId: event.correlationId,
-      causationId: event.eventId
-    });
-  }
-
-  async handlePaymentFailed(event: PaymentFailedEvent): Promise<void> {
-    await this.delivery.deliver({
-      notificationId: `payment-failed-${event.payload.orderId}`,
-      recipient: this.defaultRecipient,
-      channel: "email",
-      template: "payment.failed",
-      data: {
-        orderId: event.payload.orderId,
-        paymentId: event.payload.paymentId,
         reason: event.payload.reason,
-        provider: event.payload.provider
+        cancelledBy: event.payload.cancelledBy,
+        cancelledAt: event.payload.cancelledAt
       },
       correlationId: event.correlationId,
       causationId: event.eventId

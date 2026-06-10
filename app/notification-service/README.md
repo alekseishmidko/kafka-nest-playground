@@ -10,12 +10,11 @@ Consumes:
 
 - `notification.notification-commands`
 - `order.order-events`
-- `payment.payment-events`
 
 ## Responsibility
 
 - Consume explicit `NotificationCommand` messages.
-- React to `OrderCreated`, `PaymentAuthorized` and `PaymentFailed` domain events.
+- React to final `OrderConfirmed` and `OrderCancelled` domain events.
 - Preserve `correlationId` and use the consumed event id as delivery causation id.
 - Perform deterministic mock delivery by logging the notification payload.
 
@@ -24,9 +23,8 @@ Consumes:
 | Source topic | Event | Template |
 | --- | --- | --- |
 | `notification.notification-commands` | `NotificationCommand` | command payload `template` |
-| `order.order-events` | `OrderCreated` | `order.created` |
-| `payment.payment-events` | `PaymentAuthorized` | `payment.authorized` |
-| `payment.payment-events` | `PaymentFailed` | `payment.failed` |
+| `order.order-events` | `OrderConfirmed` | `order.confirmed` |
+| `order.order-events` | `OrderCancelled` | `order.cancelled` |
 
 `notification.notification-commands` uses Avro subject:
 
@@ -61,6 +59,7 @@ pnpm dev:notification
 ```bash
 pnpm --filter notification-service lint
 pnpm --filter notification-service build
+pnpm --filter notification-service test
 ```
 
 ## Runtime

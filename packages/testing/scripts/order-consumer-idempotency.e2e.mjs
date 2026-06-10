@@ -27,7 +27,7 @@ async function main() {
   const event = createPaymentAuthorizedEvent({ orderId, eventId });
 
   try {
-    await insertIsolatedOrder(postgres, orderId);
+  await insertIsolatedOrder(postgres, orderId);
 
     const encodedEvent = await encodeEvent(PAYMENT_AUTHORIZED_SUBJECT, event);
 
@@ -39,7 +39,7 @@ async function main() {
     );
 
     if (
-      firstProcessing.order.status !== "PAYMENT_AUTHORIZED" ||
+      firstProcessing.order.status !== "CONFIRMED" ||
       firstProcessing.processedCount !== 1
     ) {
       throw new Error(`Unexpected first processing state: ${json(firstProcessing)}`);
@@ -114,7 +114,7 @@ async function insertIsolatedOrder(postgres, orderId) {
         status,
         items
       )
-      values ($1, $2, 'USD', 100, 1, 'PENDING', $3::jsonb)
+      values ($1, $2, 'USD', 100, 1, 'RISK_APPROVED', $3::jsonb)
     `,
     [
       orderId,
@@ -137,24 +137,22 @@ async function publishEvent(producer, orderId, value) {
 }
 
 async function readProcessingState(postgres, orderId, eventId) {
-  const [orderResult, processedResult] = await Promise.all([
-    postgres.query(
-      `
-        select id, status, "updatedAt" as updated_at
-        from orders
-        where id = $1
-      `,
-      [orderId]
-    ),
-    postgres.query(
-      `
-        select count(*)::int as count
-        from processed_kafka_events
-        where event_id = $1
-      `,
-      [eventId]
-    )
-  ]);
+  const orderResult = await postgres.query(
+    `
+      select id, status, "updatedAt" as updated_at
+      from orders
+      where id = $1
+    `,
+    [orderId]
+  );
+  const processedResult = await postgres.query(
+    `
+      select count(*)::int as count
+      from processed_kafka_events
+      where event_id = $1
+    `,
+    [eventId]
+  );
   const order = orderResult.rows[0] ?? null;
   const processedCount = processedResult.rows[0]?.count ?? 0;
 

@@ -11,7 +11,9 @@ export enum OrderStatus {
   RiskApproved = "RISK_APPROVED",
   RiskRejected = "RISK_REJECTED",
   PaymentAuthorized = "PAYMENT_AUTHORIZED",
-  PaymentFailed = "PAYMENT_FAILED"
+  PaymentFailed = "PAYMENT_FAILED",
+  Confirmed = "CONFIRMED",
+  Cancelled = "CANCELLED"
 }
 
 export interface OrderItemSnapshot {

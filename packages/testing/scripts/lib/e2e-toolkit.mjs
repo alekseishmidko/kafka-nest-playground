@@ -147,6 +147,13 @@ export async function waitFor(predicate, description, options = {}) {
  * Читает outbox-запись, связанную с конкретным заказом.
  */
 export async function readOrderCreatedOutbox(client, orderId) {
+  return readOrderOutboxEvent(client, orderId, "OrderCreated");
+}
+
+/**
+ * Читает последнее outbox-событие заданного типа для конкретного заказа.
+ */
+export async function readOrderOutboxEvent(client, orderId, eventType) {
   const result = await client.query(
     `
       select
@@ -164,12 +171,12 @@ export async function readOrderCreatedOutbox(client, orderId) {
         created_at,
         updated_at
       from outbox_events
-      where event_type = 'OrderCreated'
+      where event_type = $2
         and event->'payload'->>'orderId' = $1
       order by created_at desc
       limit 1
     `,
-    [orderId]
+    [orderId, eventType]
   );
 
   return result.rows[0] ?? null;

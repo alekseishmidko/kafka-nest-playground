@@ -26,6 +26,7 @@
     "test:e2e:outbox": "pnpm --filter @kafka-playground/testing test:e2e:outbox",
     "test:e2e:outbox-failure": "pnpm --filter @kafka-playground/testing test:e2e:outbox-failure",
     "test:e2e:idempotency": "pnpm --filter @kafka-playground/testing test:e2e:idempotency",
+    "test:e2e:order-lifecycle": "pnpm --filter @kafka-playground/testing test:e2e:order-lifecycle",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test"

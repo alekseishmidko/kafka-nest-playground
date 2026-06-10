@@ -21,6 +21,33 @@ export interface OrderCreatedPayload {
 
 export type OrderCreatedEvent = EventEnvelope<OrderCreatedPayload, "OrderCreated">;
 
+export interface OrderConfirmedPayload {
+  orderId: string;
+  userId: string;
+  currency: string;
+  totalAmount: number;
+  paymentId: string;
+  confirmedAt: string;
+}
+
+export type OrderConfirmedEvent = EventEnvelope<
+  OrderConfirmedPayload,
+  "OrderConfirmed"
+>;
+
+export interface OrderCancelledPayload {
+  orderId: string;
+  userId: string;
+  reason: string;
+  cancelledBy: "risk" | "payment";
+  cancelledAt: string;
+}
+
+export type OrderCancelledEvent = EventEnvelope<
+  OrderCancelledPayload,
+  "OrderCancelled"
+>;
+
 export interface OrderRiskApprovedPayload {
   orderId: string;
   amount: number;
@@ -94,6 +121,8 @@ export type DeadLetterEvent = EventEnvelope<DeadLetterPayload, "DeadLetterEvent"
 
 export type DomainEvent =
   | OrderCreatedEvent
+  | OrderConfirmedEvent
+  | OrderCancelledEvent
   | OrderRiskApprovedEvent
   | OrderRiskRejectedEvent
   | PaymentAuthorizedEvent
@@ -103,6 +132,8 @@ export type DomainEvent =
 
 export const EVENT_TOPIC_MAP = {
   OrderCreated: KAFKA_TOPICS.orderOrderEvents,
+  OrderConfirmed: KAFKA_TOPICS.orderOrderEvents,
+  OrderCancelled: KAFKA_TOPICS.orderOrderEvents,
   OrderRiskApproved: KAFKA_TOPICS.riskRiskEvents,
   OrderRiskRejected: KAFKA_TOPICS.riskRiskEvents,
   PaymentAuthorized: KAFKA_TOPICS.paymentPaymentEvents,
@@ -115,6 +146,8 @@ export type DomainEventType = keyof typeof EVENT_TOPIC_MAP;
 
 export const EVENT_SCHEMA_SUBJECTS = {
   OrderCreated: `${EVENT_TOPIC_MAP.OrderCreated}-OrderCreated-value`,
+  OrderConfirmed: `${EVENT_TOPIC_MAP.OrderConfirmed}-OrderConfirmed-value`,
+  OrderCancelled: `${EVENT_TOPIC_MAP.OrderCancelled}-OrderCancelled-value`,
   OrderRiskApproved: `${EVENT_TOPIC_MAP.OrderRiskApproved}-OrderRiskApproved-value`,
   OrderRiskRejected: `${EVENT_TOPIC_MAP.OrderRiskRejected}-OrderRiskRejected-value`,
   PaymentAuthorized: `${EVENT_TOPIC_MAP.PaymentAuthorized}-PaymentAuthorized-value`,

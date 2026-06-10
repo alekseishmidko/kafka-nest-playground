@@ -10,7 +10,7 @@
     "start:prod": "node dist/main.js",
     "prelint": "pnpm --filter @kafka-playground/config build && pnpm --filter @kafka-playground/contracts build && pnpm --filter @kafka-playground/kafka build && pnpm --filter @kafka-playground/observability build",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "echo \"No tests configured\""
+    "test": "pnpm build && node --test test/*.test.cjs"
   },
   "dependencies": {
     "@kafka-playground/config": "workspace:^",
