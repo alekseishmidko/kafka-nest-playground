@@ -79,6 +79,24 @@ HTTP-запросы логируются автоматически с method, U
 request/correlation ID. Kafka-логи содержат topic, partition, offset, event type
 и event ID.
 
+## Retry и Dead Letter Queue
+
+Ошибки обработки событий жизненного цикла заказа проходят через общую
+retry-цепочку:
+
+```text
+order.order-events | risk.risk-events | payment.payment-events
+  -> order.order-events.retry-5s
+  -> order.order-events.retry-30s
+  -> order.order-events.retry-5m
+  -> dead-letter.events
+```
+
+Consumer автоматически подписывается на retry topics. Текущее число попыток,
+исходный topic, время первой ошибки и код последней ошибки передаются в Kafka
+headers. Подробности реализации и ручной проверки описаны в
+[packages/kafka/README.md](./packages/kafka/README.md).
+
 ## Проверки
 
 ```bash

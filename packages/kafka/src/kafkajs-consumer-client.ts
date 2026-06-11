@@ -36,10 +36,11 @@ export class KafkaJsConsumerClient implements KafkaConsumerClient {
     await this.connect();
 
     await this.consumer.run({
-      eachMessage: async ({ topic, partition, message }) => {
+      eachMessage: async ({ topic, partition, message, heartbeat }) => {
         await options.eachMessage({
           topic: topic as KafkaEachMessagePayload["topic"],
           partition,
+          heartbeat,
           message: {
             key: message.key,
             value: message.value,
