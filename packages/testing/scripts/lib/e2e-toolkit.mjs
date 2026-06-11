@@ -17,6 +17,10 @@ const repositoryRoot = fileURLToPath(new URL("../../../../", import.meta.url));
  */
 export const e2eConfig = {
   gatewayUrl: readEnv("E2E_GATEWAY_URL", "http://localhost:3000"),
+  orderAdminUrl: readEnv(
+    "E2E_ORDER_ADMIN_URL",
+    "http://localhost:3003"
+  ),
   kafkaBrokers: readEnv("E2E_KAFKA_BROKERS", "localhost:9092").split(","),
   schemaRegistryUrl: readEnv(
     "E2E_SCHEMA_REGISTRY_URL",

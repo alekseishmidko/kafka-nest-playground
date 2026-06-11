@@ -25,6 +25,7 @@ import { OrdersService } from "./orders.service";
     OrdersService,
     OutboxPublisherService,
     OutboxRepository
-  ]
+  ],
+  exports: [OutboxPublisherService]
 })
 export class OrdersModule {}
