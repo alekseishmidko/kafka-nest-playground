@@ -73,6 +73,9 @@ export const KAFKA_TOPICS = {
   catalogProductEvents: "catalog.product-events",
   catalogInventoryEvents: "catalog.inventory-events",
   orderOrderEvents: "order.order-events",
+  orderOrderEventsRetry5s: "order.order-events.retry-5s",
+  orderOrderEventsRetry30s: "order.order-events.retry-30s",
+  orderOrderEventsRetry5m: "order.order-events.retry-5m",
   paymentPaymentEvents: "payment.payment-events",
   riskRiskEvents: "risk.risk-events",
   pricingPriceEvents: "pricing.price-events",
@@ -148,6 +151,9 @@ export const TOPIC_OWNERS = {
 Примеры:
 
 - `order.order-events` -> `orderId`
+- `order.order-events.retry-5s` -> `orderId`
+- `order.order-events.retry-30s` -> `orderId`
+- `order.order-events.retry-5m` -> `orderId`
 - `payment.payment-events` -> `orderId`
 - `catalog.inventory-events` -> `productId`
 - `identity.user-events` -> `userId`

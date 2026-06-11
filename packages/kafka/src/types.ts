@@ -43,6 +43,7 @@ export interface KafkaConsumerClient {
 export interface KafkaEachMessagePayload {
   topic: KafkaTopicName;
   partition: number;
+  heartbeat(): Promise<void>;
   message: {
     key: Buffer | null;
     value: Buffer | null;

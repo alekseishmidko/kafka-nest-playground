@@ -13,6 +13,7 @@ import type { CreateOrderDto } from "./dto/create-order.dto";
 import { OutboxPublisherService } from "./outbox-publisher.service";
 import { OrdersRepository } from "./orders.repository";
 import type { OrderLifecycleEvent } from "./order-state-machine";
+import { assertValidOrderId } from "./order-id";
 
 export interface KafkaEventSource {
   topic: KafkaTopicName;
@@ -152,6 +153,9 @@ export class OrdersService {
     details: Record<string, unknown> = {}
   ): Promise<void> {
     const orderId = event.payload.orderId;
+
+    assertValidOrderId(orderId);
+
     const result = await this.ordersRepository.processLifecycleEvent({
       orderId,
       event,

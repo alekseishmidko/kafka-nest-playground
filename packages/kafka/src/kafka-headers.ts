@@ -1,14 +1,31 @@
 import type { DomainEvent } from "@kafka-playground/contracts";
 import type { KafkaHeaderInput, KafkaHeaders } from "./types";
 
+/**
+ * Канонические имена технических Kafka headers.
+ *
+ * Константа исключает расхождения в написании заголовков между producer,
+ * consumer и retry-механизмом.
+ */
 export const KAFKA_HEADER_NAMES = {
   correlationId: "x-correlation-id",
   causationId: "x-causation-id",
   eventId: "x-event-id",
   eventType: "x-event-type",
-  eventVersion: "x-event-version"
+  eventVersion: "x-event-version",
+  retryCount: "x-retry-count",
+  originalTopic: "x-original-topic",
+  firstFailedAt: "x-first-failed-at",
+  errorCode: "x-error-code"
 } as const;
 
+/**
+ * Формирует полный набор headers для доменного события.
+ *
+ * Переданные `extraHeaders` сохраняются, а обязательные поля envelope имеют
+ * приоритет. Благодаря этому retry-сообщение сохраняет служебные заголовки, но
+ * не может случайно подменить `eventId`, `eventType` или `correlationId`.
+ */
 export function buildKafkaHeaders(
   event: DomainEvent,
   extraHeaders: KafkaHeaderInput = {}
@@ -23,6 +40,12 @@ export function buildKafkaHeaders(
   });
 }
 
+/**
+ * Читает строковое значение Kafka header независимо от представления KafkaJS.
+ *
+ * KafkaJS может вернуть header как `string` или `Buffer`, поэтому преобразование
+ * централизовано и не дублируется в consumer-ах.
+ */
 export function readHeader(headers: KafkaHeaders | undefined, name: string): string | undefined {
   const value = headers?.[name];
 
@@ -37,6 +60,9 @@ export function readHeader(headers: KafkaHeaders | undefined, name: string): str
   return undefined;
 }
 
+/**
+ * Удаляет headers со значением `undefined` перед передачей сообщения KafkaJS.
+ */
 export function compactHeaders(headers: KafkaHeaderInput): KafkaHeaders {
   return Object.fromEntries(
     Object.entries(headers).filter((entry): entry is [string, string | Buffer] => {

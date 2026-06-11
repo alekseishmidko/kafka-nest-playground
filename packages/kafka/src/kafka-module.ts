@@ -2,6 +2,8 @@ import { DynamicModule, Global, Module, Provider, Type } from "@nestjs/common";
 import { KafkaConsumerRunner } from "./kafka-consumer-runner";
 import { KafkaEventLogger } from "./kafka-logger";
 import { KafkaProducerService } from "./kafka-producer.service";
+import { KafkaRetryDispatcher } from "./kafka-retry-dispatcher";
+import { KafkaRetryPolicy } from "./kafka-retry-policy";
 import {
   KAFKA_CONSUMER_CLIENT,
   KAFKA_MODULE_OPTIONS,
@@ -47,6 +49,8 @@ export class KafkaModule {
       },
       KafkaEventLogger,
       KafkaProducerService,
+      KafkaRetryPolicy,
+      KafkaRetryDispatcher,
       KafkaConsumerRunner
     ];
 
@@ -59,6 +63,8 @@ export class KafkaModule {
         KAFKA_CONSUMER_CLIENT,
         SCHEMA_REGISTRY_CODEC,
         KafkaProducerService,
+        KafkaRetryPolicy,
+        KafkaRetryDispatcher,
         KafkaConsumerRunner
       ]
     };
@@ -89,6 +95,8 @@ export class KafkaModule {
       },
       KafkaEventLogger,
       KafkaProducerService,
+      KafkaRetryPolicy,
+      KafkaRetryDispatcher,
       KafkaConsumerRunner
     ];
 
@@ -102,6 +110,8 @@ export class KafkaModule {
         KAFKA_CONSUMER_CLIENT,
         SCHEMA_REGISTRY_CODEC,
         KafkaProducerService,
+        KafkaRetryPolicy,
+        KafkaRetryDispatcher,
         KafkaConsumerRunner
       ]
     };
