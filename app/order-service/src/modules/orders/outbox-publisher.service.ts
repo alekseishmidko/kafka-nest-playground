@@ -1,6 +1,9 @@
 import { Injectable, OnApplicationShutdown, OnModuleInit } from "@nestjs/common";
 import { KafkaProducerService } from "@kafka-playground/kafka";
-import { PinoLogger } from "@kafka-playground/observability";
+import {
+  ApplicationMetrics,
+  PinoLogger
+} from "@kafka-playground/observability";
 import { OutboxRepository } from "./outbox.repository";
 
 /**
@@ -29,7 +32,8 @@ export class OutboxPublisherService implements OnModuleInit, OnApplicationShutdo
   constructor(
     private readonly outboxRepository: OutboxRepository,
     private readonly kafkaProducer: KafkaProducerService,
-    private readonly logger: PinoLogger
+    private readonly logger: PinoLogger,
+    private readonly metrics: ApplicationMetrics
   ) {
     this.logger.setContext(OutboxPublisherService.name);
   }
@@ -93,6 +97,10 @@ export class OutboxPublisherService implements OnModuleInit, OnApplicationShutdo
           });
 
           await this.outboxRepository.markPublished(outboxEvent.id);
+          this.metrics.recordOutboxPublish(
+            outboxEvent.topic,
+            "success"
+          );
 
           this.logger.info(
             {
@@ -107,6 +115,10 @@ export class OutboxPublisherService implements OnModuleInit, OnApplicationShutdo
           const attempts = outboxEvent.attempts + 1;
 
           await this.outboxRepository.markFailed(outboxEvent.id, attempts, error);
+          this.metrics.recordOutboxPublish(
+            outboxEvent.topic,
+            "failure"
+          );
 
           this.logger.warn(
             {

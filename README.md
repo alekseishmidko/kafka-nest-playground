@@ -57,6 +57,7 @@ pnpm dev:risk-service-go
 | PostgreSQL | `localhost:5432` | Хранилище заказов |
 | Grafana | `http://localhost:3001` | При `GRAFANA_PORT=3001` |
 | Prometheus | `http://localhost:9090` | Метрики |
+| Order metrics | `http://localhost:3003/metrics` | Kafka, outbox, DLQ и Node.js metrics |
 
 `payment-service`, `risk-service` и `notification-service` являются Kafka
 workers и не открывают сетевые порты.
@@ -102,6 +103,33 @@ headers. Подробности реализации и ручной прове�
 позволяет просмотреть запись, исправить payload и поставить новую копию события
 в transactional outbox либо пометить событие как проигнорированное. Подробное
 описание находится в [app/order-service/README.md](./app/order-service/README.md).
+
+## Kafka Observability
+
+Prometheus собирает метрики `order-service` с `/metrics`. Grafana автоматически
+загружает dashboard **Kafka Order Flow Observability**, содержащий:
+
+- Kafka success/error rate;
+- retry rate по этапам;
+- p95 времени обработки;
+- consumer lag по partition;
+- outbox backlog;
+- число необработанных DLQ events.
+
+Alert rules находятся в
+[`infrastructure/prometheus-rules.yml`](./infrastructure/prometheus-rules.yml):
+
+- появление нового DLQ event;
+- DLQ backlog дольше пяти минут;
+- consumer lag выше 100;
+- outbox backlog выше 25;
+- доля ошибок handler-ов выше 10%.
+
+После изменения provisioning перезапустите Prometheus и Grafana:
+
+```bash
+pnpm infra:up
+```
 
 ## Проверки
 

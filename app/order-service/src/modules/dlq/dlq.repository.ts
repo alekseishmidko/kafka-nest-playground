@@ -6,6 +6,8 @@ import {
 } from "@kafka-playground/contracts";
 import {
   type FindOptionsWhere,
+  In,
+  LessThan,
   Repository
 } from "typeorm";
 import {
@@ -96,5 +98,29 @@ export class DlqRepository {
 
   async findById(id: string): Promise<DeadLetterEventEntity | null> {
     return this.repository.findOneBy({ id });
+  }
+
+  /**
+   * Считает необработанные DLQ-записи для operational gauge и alert-а.
+   */
+  async countNew(): Promise<number> {
+    return this.repository.countBy({
+      status: DeadLetterEventStatus.New
+    });
+  }
+
+  /**
+   * Удаляет только давно завершённые записи; `NEW` никогда не очищаются.
+   */
+  async deleteResolvedBefore(date: Date): Promise<number> {
+    const result = await this.repository.delete({
+      status: In([
+        DeadLetterEventStatus.Reprocessed,
+        DeadLetterEventStatus.Ignored
+      ]),
+      updatedAt: LessThan(date)
+    });
+
+    return result.affected ?? 0;
   }
 }

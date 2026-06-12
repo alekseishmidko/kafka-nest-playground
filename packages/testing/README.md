@@ -127,7 +127,9 @@ pnpm test:e2e:dlq-management
 
 ```env
 E2E_ORDER_ADMIN_URL=http://localhost:3003
+E2E_DLQ_OPERATOR_API_KEY=local-dlq-operator-key
 ```
 
 Требуются запущенные Kafka, Schema Registry, PostgreSQL и `order-service`.
-Миграция `dead_letter_events` должна быть применена.
+Миграции `dead_letter_events` и `dlq_audit_log` должны быть применены. Тест
+передаёт текущую optimistic version и обязательный комментарий оператора.

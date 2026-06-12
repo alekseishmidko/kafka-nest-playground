@@ -1,0 +1,174 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "DLQ NEW",
+      "id": 1,
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "sum(dlq_new_events)", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "type": "stat",
+      "title": "Outbox PENDING",
+      "id": 2,
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        { "expr": "sum(outbox_pending_events)", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 10 },
+              { "color": "red", "value": 25 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "type": "stat",
+      "title": "Maximum Consumer Lag",
+      "id": 3,
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "max(kafka_consumer_lag)", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "type": "stat",
+      "title": "DLQ Events / 5m",
+      "id": 4,
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        { "expr": "sum(increase(kafka_dlq_events_total[5m]))", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Kafka Events Rate",
+      "id": 5,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "expr": "sum by (topic) (rate(kafka_events_consumed_total[5m]))",
+          "legendFormat": "success {{topic}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (topic) (rate(kafka_events_failed_total[5m]))",
+          "legendFormat": "failure {{topic}}",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
+    },
+    {
+      "type": "timeseries",
+      "title": "Retry Stages",
+      "id": 6,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        {
+          "expr": "sum by (stage, original_topic) (rate(kafka_retry_events_total[5m]))",
+          "legendFormat": "{{original_topic}} -> {{stage}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
+    },
+    {
+      "type": "timeseries",
+      "title": "Kafka Processing p95",
+      "id": 7,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, topic) (rate(kafka_event_processing_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95 {{topic}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "type": "timeseries",
+      "title": "Consumer Lag by Partition",
+      "id": 8,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [
+        {
+          "expr": "kafka_consumer_lag",
+          "legendFormat": "{{topic}} p{{partition}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] }
+    },
+    {
+      "type": "timeseries",
+      "title": "Outbox by Status",
+      "id": 9,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "targets": [
+        {
+          "expr": "sum by (status) (outbox_events)",
+          "legendFormat": "{{status}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] }
+    },
+    {
+      "type": "timeseries",
+      "title": "Outbox Publish Attempts",
+      "id": 10,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "targets": [
+        {
+          "expr": "sum by (result, topic) (rate(outbox_publish_attempts_total[5m]))",
+          "legendFormat": "{{result}} {{topic}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] }
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 39,
+  "tags": ["kafka", "outbox", "dlq"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timezone": "browser",
+  "title": "Kafka Order Flow Observability",
+  "uid": "kafka-order-observability",
+  "version": 1
+}

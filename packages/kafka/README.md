@@ -122,6 +122,22 @@ offset, описание ошибки и сериализованное исхо
 `x-original-topic`; это особенно важно, потому что order, risk и payment
 используют общие retry topics.
 
+При наличии `ApplicationMetrics` runner записывает:
+
+- успешные и неуспешные обработки;
+- нормализованный error code;
+- duration deserialize + handler;
+- retry и DLQ counters.
+
+Retry delay намеренно не включается в processing duration.
+
+### `KafkaLagMonitor`
+
+Если заданы `consumerGroupId` и metrics provider, monitor каждые 15 секунд
+использует Kafka Admin API для обновления `kafka_consumer_lag`. Расчёты
+выполняются через `BigInt`, потому что Kafka offsets могут превышать безопасный
+32-bit диапазон.
+
 Offset исходного сообщения фиксируется только после успешной публикации в
 следующий retry topic или DLQ. Если Kafka producer не смог выполнить публикацию,
 ошибка пробрасывается в KafkaJS, поэтому исходное сообщение будет доставлено

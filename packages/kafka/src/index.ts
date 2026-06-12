@@ -2,6 +2,7 @@ export * from "./kafka-consumer-runner";
 export * from "./kafka-errors";
 export * from "./kafka-headers";
 export * from "./kafka-logger";
+export * from "./kafka-lag-monitor";
 export * from "./kafka-module";
 export * from "./kafka-producer.service";
 export * from "./kafka-retry-dispatcher";

@@ -6,14 +6,15 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "prebuild": "pnpm --filter @kafka-playground/contracts build",
+    "prebuild": "pnpm --filter @kafka-playground/contracts build && pnpm --filter @kafka-playground/observability build",
     "build": "tsc -p tsconfig.json",
-    "prelint": "pnpm --filter @kafka-playground/contracts build",
+    "prelint": "pnpm --filter @kafka-playground/contracts build && pnpm --filter @kafka-playground/observability build",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm build && node --test test/*.test.cjs"
   },
   "dependencies": {
     "@kafka-playground/contracts": "workspace:*",
+    "@kafka-playground/observability": "workspace:^",
     "@kafkajs/confluent-schema-registry": "^4.1.0",
     "@nestjs/common": "^11.0.0",
     "kafkajs": "^2.2.4"

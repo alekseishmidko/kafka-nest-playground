@@ -10,6 +10,40 @@
 - Kafka consumers обрабатывают risk, payment и DLQ events;
 - PostgreSQL хранит заказы, outbox, consumer idempotency и DLQ.
 
+## Метрики
+
+Prometheus endpoint:
+
+```text
+GET http://localhost:3003/metrics
+```
+
+`order-service` экспортирует:
+
+- counters обработки, ошибок, retry и DLQ;
+- histogram времени Kafka handler-а;
+- consumer lag по каждой partition;
+- фактический outbox backlog из PostgreSQL;
+- число DLQ-записей `NEW`;
+- результаты попыток outbox publish;
+- стандартные Node.js runtime metrics.
+
+`OperationalMetricsCollector` каждые 15 секунд перечитывает PostgreSQL.
+Значения gauges не зависят от памяти процесса и корректно восстанавливаются
+после рестарта.
+
+`KafkaLagMonitor` через Kafka Admin API сравнивает latest и committed offsets.
+Для новой consumer group без committed offset lag считается от low offset.
+
+Проверка:
+
+```bash
+curl http://localhost:3003/metrics
+```
+
+Основные выражения и правила cardinality описаны в
+[`packages/observability/README.md`](../../packages/observability/README.md).
+
 ## DLQ: принцип работы
 
 ```text
@@ -46,9 +80,14 @@ consumer handler error
 | `original_event` | Полный исходный event envelope в JSONB |
 | `status` | `NEW`, `REPROCESSED` или `IGNORED` |
 | `reprocessed_event_id` | `eventId` новой исправленной копии |
+| `resolved_by` | Идентификатор оператора, принявшего решение |
+| `resolution_comment` | Обязательное обоснование действия |
+| `version` | Версия записи для optimistic locking |
 
 Индекс `(status, created_at desc)` ускоряет основной экран оператора, а индекс
-`original_event_id` позволяет найти историю конкретного события.
+`original_event_id` позволяет найти историю конкретного события. Частичный
+индекс `(status, updated_at)` обслуживает retention только для завершённых
+записей и не раздувает индекс строками `NEW`.
 
 ## Статусы
 
@@ -57,9 +96,11 @@ NEW -> REPROCESSED
 NEW -> IGNORED
 ```
 
-Обратные переходы запрещены. Обе команды используют
-`SELECT ... FOR UPDATE` через TypeORM `pessimistic_write`, поэтому два
-одновременных HTTP-запроса не смогут принять разные решения по одной записи.
+Обратные переходы запрещены. Обе команды одновременно используют:
+
+- `version` для обнаружения устаревшего экрана оператора;
+- `SELECT ... FOR UPDATE` для сериализации параллельных транзакций;
+- единую транзакцию для изменения DLQ, audit log и outbox.
 
 `REPROCESSED` означает, что исправленное событие атомарно сохранено в
 `outbox_events`. Фактическая Kafka-публикация может произойти немного позже.
@@ -73,10 +114,29 @@ NEW -> IGNORED
 http://localhost:3003/admin/dlq
 ```
 
+Каждый запрос должен передавать:
+
+```http
+X-Admin-Api-Key: <secret>
+```
+
+Роли задаются разными переменными окружения:
+
+| Переменная | Роль | Разрешения |
+| --- | --- | --- |
+| `DLQ_ADMIN_VIEWER_API_KEY` | `DLQ_VIEWER` | `GET` списка и записи |
+| `DLQ_ADMIN_OPERATOR_API_KEY` | `DLQ_OPERATOR` | чтение, reprocess, ignore |
+
+Ключи нельзя хранить в Git. В production их следует выдавать через secret
+manager и регулярно ротировать. Текущий rate limit равен 60 запросам в минуту
+на ключ в рамках одного процесса. Для нескольких replicas состояние limiter-а
+следует перенести в Redis или API gateway.
+
 ### Получить список
 
 ```http
 GET /admin/dlq?status=NEW&limit=50&offset=0
+X-Admin-Api-Key: <viewer-or-operator-key>
 ```
 
 `status` необязателен. `limit` должен находиться в диапазоне `1..200`.
@@ -85,6 +145,7 @@ GET /admin/dlq?status=NEW&limit=50&offset=0
 
 ```http
 GET /admin/dlq/{id}
+X-Admin-Api-Key: <viewer-or-operator-key>
 ```
 
 ### Повторно обработать
@@ -92,8 +153,11 @@ GET /admin/dlq/{id}
 ```http
 POST /admin/dlq/{id}/reprocess
 Content-Type: application/json
+X-Admin-Api-Key: <operator-key>
 
 {
+  "version": 1,
+  "comment": "Исправлен orderId после восстановления заказа",
   "payload": {
     "orderId": "a2a25e8e-3bd8-42ed-aafe-0da8889d1a75"
   }
@@ -103,27 +167,43 @@ Content-Type: application/json
 Перед созданием outbox-записи сервис:
 
 1. Загружает DLQ-запись под row lock.
-2. Проверяет статус `NEW`.
-3. Объединяет исходный payload и исправленные поля.
-4. Валидирует обязательные поля конкретного event type.
-5. Проверяет соответствие event type исходному topic.
+2. Проверяет статус `NEW` и совпадение `version`.
+3. Разрешает изменять только whitelist полей конкретного event type.
+4. Объединяет исходный payload и исправленные поля.
+5. Валидирует обязательные поля и соответствие исходному topic.
 6. Создаёт новый `eventId`.
 7. Сохраняет исходный `eventId` в `causationId`.
 8. Очищает retry metadata: новый producer создаст только стандартные headers.
-9. В одной транзакции создаёт `outbox_events` и ставит `REPROCESSED`.
+9. В одной транзакции создаёт `outbox_events`, audit log и ставит
+   `REPROCESSED`.
 
 ### Игнорировать
 
 ```http
 POST /admin/dlq/{id}/ignore
 Content-Type: application/json
+X-Admin-Api-Key: <operator-key>
 
 {
+  "version": 1,
   "reason": "Событие относится к удалённым тестовым данным"
 }
 ```
 
-Причина обязательна и сохраняется для аудита.
+Причина обязательна, должна содержать от 5 до 1000 символов и сохраняется в
+DLQ-записи и неизменяемой таблице `dlq_audit_log`.
+
+## Retention
+
+`DlqRetentionService` раз в сутки удаляет только завершённые
+`REPROCESSED`/`IGNORED` записи старше заданного срока:
+
+```env
+DLQ_RETENTION_DAYS=90
+```
+
+Записи `NEW` не удаляются независимо от возраста. Связанный audit log удаляется
+по `ON DELETE CASCADE` только вместе с завершённой записью.
 
 ## Запуск миграций
 
@@ -161,11 +241,7 @@ pnpm test:e2e:dlq-management
 
 ## Безопасность
 
-Admin API является внутренним. Перед production-развёртыванием необходимо:
-
-- закрыть порт сетевой политикой;
-- добавить authentication и RBAC;
-- логировать identity оператора;
-- ограничить размер исправленного payload;
-- добавить rate limit;
-- не отдавать `errorStack` пользователям без административных прав.
+Admin API уже использует API key, роли, operator identity, whitelist
+исправляемых полей, optimistic locking, audit log и rate limit. В production
+дополнительно обязательны TLS, сетевые политики, secret manager и фильтрация
+`errorStack` для роли viewer.

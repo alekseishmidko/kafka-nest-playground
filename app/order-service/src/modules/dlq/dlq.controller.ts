@@ -8,27 +8,41 @@ import {
   ParseIntPipe,
   ParseUUIDPipe,
   Post,
-  Query
+  Query,
+  UseGuards
 } from "@nestjs/common";
 import type { CorrectedPayload } from "./dlq-reprocess.factory";
 import { DlqService } from "./dlq.service";
 import { DeadLetterEventStatus } from "./entities/dead-letter-event.entity";
+import {
+  CurrentDlqPrincipal,
+  DlqAdminRole,
+  DlqApiKeyGuard,
+  type DlqAdminPrincipal,
+  DlqRateLimitGuard,
+  DlqRoles
+} from "./dlq-auth";
 
 interface ReprocessDeadLetterEventBody {
   payload?: CorrectedPayload;
+  version?: number;
+  comment?: string;
 }
 
 interface IgnoreDeadLetterEventBody {
   reason?: string;
+  version?: number;
 }
 
 /**
  * Внутренний административный HTTP API для DLQ.
  *
- * Endpoint-ы не предназначены для публичного клиентского трафика. В production
- * их необходимо закрывать authentication/authorization и сетевой политикой.
+ * Все endpoint-ы защищены API key, RBAC и process-local rate limit. Сетевую
+ * изоляцию необходимо сохранить как дополнительный уровень защиты, поскольку
+ * API позволяет повторно запускать доменные события.
  */
 @Controller("admin/dlq")
+@UseGuards(DlqApiKeyGuard, DlqRateLimitGuard)
 export class DlqController {
   constructor(private readonly dlqService: DlqService) {}
 
@@ -36,6 +50,7 @@ export class DlqController {
    * Возвращает страницу DLQ-записей, начиная с самых новых.
    */
   @Get()
+  @DlqRoles(DlqAdminRole.Viewer, DlqAdminRole.Operator)
   findMany(
     @Query("status") status: string | undefined,
     @Query("limit", new DefaultValuePipe(50), ParseIntPipe) limit: number,
@@ -61,6 +76,7 @@ export class DlqController {
   }
 
   @Get(":id")
+  @DlqRoles(DlqAdminRole.Viewer, DlqAdminRole.Operator)
   findOne(
     @Param("id", new ParseUUIDPipe()) id: string
   ) {
@@ -71,19 +87,34 @@ export class DlqController {
    * Проверяет исправленный payload и ставит новую копию event-а в outbox.
    */
   @Post(":id/reprocess")
+  @DlqRoles(DlqAdminRole.Operator)
   reprocess(
     @Param("id", new ParseUUIDPipe()) id: string,
-    @Body() body: ReprocessDeadLetterEventBody
+    @Body() body: ReprocessDeadLetterEventBody,
+    @CurrentDlqPrincipal() principal: DlqAdminPrincipal
   ) {
-    return this.dlqService.reprocess(id, body.payload ?? {});
+    return this.dlqService.reprocess(
+      id,
+      body.payload ?? {},
+      {
+        expectedVersion: body.version ?? 0,
+        operatorId: principal.operatorId,
+        comment: body.comment ?? ""
+      }
+    );
   }
 
   @Post(":id/ignore")
+  @DlqRoles(DlqAdminRole.Operator)
   ignore(
     @Param("id", new ParseUUIDPipe()) id: string,
-    @Body() body: IgnoreDeadLetterEventBody
+    @Body() body: IgnoreDeadLetterEventBody,
+    @CurrentDlqPrincipal() principal: DlqAdminPrincipal
   ) {
-    return this.dlqService.ignore(id, body.reason ?? "");
+    return this.dlqService.ignore(id, body.reason ?? "", {
+      expectedVersion: body.version ?? 0,
+      operatorId: principal.operatorId
+    });
   }
 }
 

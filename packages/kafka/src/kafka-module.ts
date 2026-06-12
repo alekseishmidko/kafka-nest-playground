@@ -4,6 +4,7 @@ import { KafkaEventLogger } from "./kafka-logger";
 import { KafkaProducerService } from "./kafka-producer.service";
 import { KafkaRetryDispatcher } from "./kafka-retry-dispatcher";
 import { KafkaRetryPolicy } from "./kafka-retry-policy";
+import { KafkaLagMonitor } from "./kafka-lag-monitor";
 import {
   KAFKA_CONSUMER_CLIENT,
   KAFKA_MODULE_OPTIONS,
@@ -51,7 +52,8 @@ export class KafkaModule {
       KafkaProducerService,
       KafkaRetryPolicy,
       KafkaRetryDispatcher,
-      KafkaConsumerRunner
+      KafkaConsumerRunner,
+      KafkaLagMonitor
     ];
 
     return {
@@ -65,7 +67,8 @@ export class KafkaModule {
         KafkaProducerService,
         KafkaRetryPolicy,
         KafkaRetryDispatcher,
-        KafkaConsumerRunner
+        KafkaConsumerRunner,
+        KafkaLagMonitor
       ]
     };
   }
@@ -97,7 +100,8 @@ export class KafkaModule {
       KafkaProducerService,
       KafkaRetryPolicy,
       KafkaRetryDispatcher,
-      KafkaConsumerRunner
+      KafkaConsumerRunner,
+      KafkaLagMonitor
     ];
 
     return {
@@ -112,7 +116,8 @@ export class KafkaModule {
         KafkaProducerService,
         KafkaRetryPolicy,
         KafkaRetryDispatcher,
-        KafkaConsumerRunner
+        KafkaConsumerRunner,
+        KafkaLagMonitor
       ]
     };
   }

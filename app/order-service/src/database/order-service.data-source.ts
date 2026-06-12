@@ -8,6 +8,9 @@ import { CreateOrderServiceSchema1717977600000 } from "./migrations/171797760000
 import { AddFinalOrderStatuses1718064000000 } from "./migrations/1718064000000-add-final-order-statuses";
 import { CreateDeadLetterEvents1718150400000 } from "./migrations/1718150400000-create-dead-letter-events";
 import { DeadLetterEventEntity } from "../modules/dlq/entities/dead-letter-event.entity";
+import { DlqAuditLogEntity } from "../modules/dlq/entities/dlq-audit-log.entity";
+import { AddDlqSecurityAudit1718236800000 } from "./migrations/1718236800000-add-dlq-security-audit";
+import { AddDlqRetentionIndex1718323200000 } from "./migrations/1718323200000-add-dlq-retention-index";
 
 loadServiceEnvFiles(join(process.cwd()));
 
@@ -35,12 +38,15 @@ export function createOrderServiceDataSourceOptions(): DataSourceOptions {
       OrderEntity,
       OutboxEventEntity,
       ProcessedKafkaEventEntity,
-      DeadLetterEventEntity
+      DeadLetterEventEntity,
+      DlqAuditLogEntity
     ],
     migrations: [
       CreateOrderServiceSchema1717977600000,
       AddFinalOrderStatuses1718064000000,
-      CreateDeadLetterEvents1718150400000
+      CreateDeadLetterEvents1718150400000,
+      AddDlqSecurityAudit1718236800000,
+      AddDlqRetentionIndex1718323200000
     ]
   };
 }

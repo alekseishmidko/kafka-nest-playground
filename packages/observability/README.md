@@ -1,39 +1,106 @@
 # @kafka-playground/observability
 
-Shared package for structured NestJS logging based on Pino.
+Общий пакет структурированного логирования и Prometheus-метрик NestJS-сервисов.
 
-## Usage
+## Логирование
 
-Register the logger module in a service:
+Регистрация Pino:
 
 ```ts
 createServiceLoggerModule({
-  serviceName: "gateway-service",
+  serviceName: "order-service",
   environment: process.env.APP_ENV ?? "local"
 })
 ```
 
-Use the NestJS adapter during bootstrap:
+- `APP_ENV=local`: форматирование через `pino-pretty`;
+- `APP_ENV=prod`: newline-delimited JSON;
+- `LOG_LEVEL`: переопределяет уровень;
+- `x-correlation-id` используется как request ID;
+- при отсутствии correlation ID применяется `x-request-id` или UUID.
+
+## Prometheus Metrics
+
+Регистрация:
 
 ```ts
-const logger = app.get(Logger);
-app.useLogger(logger);
+MetricsModule.register({
+  serviceName: "order-service"
+})
 ```
 
-## Runtime format
+Модуль создаёт отдельный `prom-client Registry`, добавляет service label,
+регистрирует стандартные Node.js метрики и публикует:
 
-- `APP_ENV=local`: human-readable output through `pino-pretty`.
-- `APP_ENV=prod`: newline-delimited JSON.
-- `LOG_LEVEL`: overrides the default log level.
+```text
+GET /metrics
+```
 
-HTTP logs include service, environment, request ID, correlation ID, method,
-URL, remote address, status code and response time.
+### Прикладные метрики
 
-`x-correlation-id` is used as the request ID when present. Otherwise the logger
-uses `x-request-id` or generates a UUID.
+| Метрика | Тип | Значение |
+| --- | --- | --- |
+| `kafka_events_consumed_total` | Counter | Успешная обработка Kafka events |
+| `kafka_events_failed_total` | Counter | Ошибки handler-ов по error code |
+| `kafka_retry_events_total` | Counter | Публикации на retry-этап |
+| `kafka_dlq_events_total` | Counter | Успешные публикации в DLQ |
+| `kafka_event_processing_duration_seconds` | Histogram | Время deserialize + handler, без retry delay |
+| `kafka_consumer_lag` | Gauge | Lag по group/topic/partition |
+| `outbox_events` | Gauge | DB snapshot по статусам outbox |
+| `outbox_pending_events` | Gauge | Текущий PENDING backlog |
+| `outbox_publish_attempts_total` | Counter | Успешные и неуспешные publish attempts |
+| `dlq_new_events` | Gauge | DLQ-записи, ожидающие решения |
 
-`logServiceStarted` writes a structured startup event. HTTP services should
-provide `host`, `port`, `url` and `docsUrl`; gRPC services should provide
-`grpcUrl`; background consumers use `transport: "worker"`.
+### Правила cardinality
 
-Tracing and metrics remain planned responsibilities.
+Labels содержат только значения с ограниченным множеством вариантов:
+
+- service;
+- topic;
+- event type;
+- error code;
+- retry stage;
+- partition;
+- status/result.
+
+Нельзя добавлять в labels `eventId`, `orderId`, correlation ID, error message
+или stack trace. Для них используются структурированные логи. Каждый уникальный
+набор labels создаёт отдельный time series, поэтому идентификаторы приводят к
+неконтролируемому потреблению памяти Prometheus.
+
+### Примеры PromQL
+
+Доля ошибок:
+
+```promql
+sum(rate(kafka_events_failed_total[5m]))
+/
+clamp_min(
+  sum(rate(kafka_events_consumed_total[5m]))
+  + sum(rate(kafka_events_failed_total[5m])),
+  0.001
+)
+```
+
+p95 обработки:
+
+```promql
+histogram_quantile(
+  0.95,
+  sum by (le, topic) (
+    rate(kafka_event_processing_duration_seconds_bucket[5m])
+  )
+)
+```
+
+Максимальный lag:
+
+```promql
+max by (group, topic) (kafka_consumer_lag)
+```
+
+## Тесты
+
+```bash
+pnpm --filter @kafka-playground/observability test
+```
