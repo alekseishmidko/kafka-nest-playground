@@ -112,6 +112,30 @@ export class OutboxRepository {
       }
     );
   }
+
+  /**
+   * Возвращает количество строк по рабочим статусам для Prometheus gauge.
+   */
+  async countByStatuses(): Promise<Record<OutboxEventStatus, number>> {
+    const rows: Array<{ status: OutboxEventStatus; count: string }> =
+      await this.repository
+        .createQueryBuilder("outbox")
+        .select("outbox.status", "status")
+        .addSelect("count(*)", "count")
+        .groupBy("outbox.status")
+        .getRawMany();
+    const result = {
+      [OutboxEventStatus.Pending]: 0,
+      [OutboxEventStatus.Published]: 0,
+      [OutboxEventStatus.Failed]: 0
+    };
+
+    for (const row of rows) {
+      result[row.status] = Number(row.count);
+    }
+
+    return result;
+  }
 }
 
 /**

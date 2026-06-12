@@ -1,0 +1,54 @@
+groups:
+  - name: kafka-playground-operational
+    rules:
+      - alert: KafkaDeadLetterEventCreated
+        expr: sum(increase(kafka_dlq_events_total[5m])) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Новое событие направлено в DLQ"
+          description: "За последние 5 минут появился как минимум один DeadLetterEvent."
+
+      - alert: DlqBacklogNotEmpty
+        expr: sum(dlq_new_events) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DLQ содержит необработанные события"
+          description: "Записи в статусе NEW ожидают решения оператора более 5 минут."
+
+      - alert: KafkaConsumerLagHigh
+        expr: max(kafka_consumer_lag) > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Высокий Kafka consumer lag"
+          description: "Lag хотя бы одной partition превышает 100 сообщений более 5 минут."
+
+      - alert: OutboxBacklogHigh
+        expr: sum(outbox_events{status=~"PENDING|FAILED"}) > 25
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Растёт transactional outbox backlog"
+          description: "Более 25 outbox-событий ожидают публикации или находятся в FAILED."
+
+      - alert: KafkaHandlerFailureRateHigh
+        expr: |
+          sum(rate(kafka_events_failed_total[5m]))
+          /
+          clamp_min(
+            sum(rate(kafka_events_consumed_total[5m]))
+            + sum(rate(kafka_events_failed_total[5m])),
+            0.001
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Высокая доля ошибок Kafka handler-ов"
+          description: "Более 10% попыток обработки Kafka-событий завершаются ошибкой."

@@ -7,6 +7,12 @@ import { DlqController } from "./dlq.controller";
 import { DlqRepository } from "./dlq.repository";
 import { DlqService } from "./dlq.service";
 import { DeadLetterEventEntity } from "./entities/dead-letter-event.entity";
+import { DlqAuditLogEntity } from "./entities/dlq-audit-log.entity";
+import {
+  DlqApiKeyGuard,
+  DlqRateLimitGuard
+} from "./dlq-auth";
+import { DlqRetentionService } from "./dlq-retention.service";
 
 /**
  * Изолированный platform-модуль управления Dead Letter Queue.
@@ -15,11 +21,20 @@ import { DeadLetterEventEntity } from "./entities/dead-letter-event.entity";
   imports: [
     TypeOrmModule.forFeature([
       DeadLetterEventEntity,
+      DlqAuditLogEntity,
       OutboxEventEntity
     ]),
     OrdersModule
   ],
   controllers: [DlqController],
-  providers: [DlqConsumer, DlqRepository, DlqService]
+  providers: [
+    DlqApiKeyGuard,
+    DlqRateLimitGuard,
+    DlqConsumer,
+    DlqRepository,
+    DlqRetentionService,
+    DlqService
+  ],
+  exports: [DlqRepository]
 })
 export class DlqModule {}

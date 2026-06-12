@@ -1,6 +1,7 @@
 import {
   Inject,
   Injectable,
+  Optional,
   type OnApplicationBootstrap
 } from "@nestjs/common";
 import {
@@ -8,6 +9,8 @@ import {
   type DomainEvent,
   type KafkaTopicName
 } from "@kafka-playground/contracts";
+import { ApplicationMetrics } from "@kafka-playground/observability";
+import { KafkaNonRetryableError } from "./kafka-errors";
 import { KAFKA_CONSUMER_CLIENT, SCHEMA_REGISTRY_CODEC } from "./kafka.tokens";
 import { readHeader, KAFKA_HEADER_NAMES } from "./kafka-headers";
 import { KafkaEventLogger } from "./kafka-logger";
@@ -47,7 +50,9 @@ export class KafkaConsumerRunner implements OnApplicationBootstrap {
     private readonly codec: SchemaRegistryCodec,
     private readonly logger: KafkaEventLogger,
     private readonly retryPolicy: KafkaRetryPolicy,
-    private readonly retryDispatcher: KafkaRetryDispatcher
+    private readonly retryDispatcher: KafkaRetryDispatcher,
+    @Optional()
+    private readonly metrics?: ApplicationMetrics
   ) {}
 
   /**
@@ -97,6 +102,21 @@ export class KafkaConsumerRunner implements OnApplicationBootstrap {
       options.fromBeginning,
       handler
     );
+  }
+
+  /**
+   * Возвращает фактически используемые topics для lag collector-а.
+   */
+  getSubscriptionTopics(): KafkaTopicName[] {
+    return [
+      ...new Set(
+        this.registrations.flatMap((registration) =>
+          registration.topics.flatMap((topic) =>
+            this.retryPolicy.getSubscriptionTopics(topic)
+          )
+        )
+      )
+    ];
   }
 
   private register<TEvent extends DomainEvent>(
@@ -161,12 +181,14 @@ export class KafkaConsumerRunner implements OnApplicationBootstrap {
       await this.consumer.run({
         eachMessage: async ({ topic, partition, heartbeat, message }) => {
           let event: DomainEvent | undefined;
+          let startedAt: bigint | undefined;
 
           try {
             await delayWithHeartbeat(
               this.retryPolicy.getDelayMs(topic),
               heartbeat
             );
+            startedAt = process.hrtime.bigint();
 
             if (!message.value) {
               throw new Error("Kafka message value is empty");
@@ -204,7 +226,37 @@ export class KafkaConsumerRunner implements OnApplicationBootstrap {
             }
 
             await handler(context);
+
+            this.metrics?.recordKafkaConsumed(
+              topic,
+              decodedEvent.eventType
+            );
+            this.metrics?.observeKafkaProcessing({
+              topic,
+              eventType: decodedEvent.eventType,
+              result: "success",
+              durationSeconds: elapsedSeconds(startedAt)
+            });
           } catch (error) {
+            const eventType =
+              event?.eventType ??
+              readHeader(
+                message.headers,
+                KAFKA_HEADER_NAMES.eventType
+              ) ??
+              "UNKNOWN_EVENT";
+
+            this.metrics?.recordKafkaFailed(
+              topic,
+              eventType,
+              getErrorCode(error)
+            );
+            this.metrics?.observeKafkaProcessing({
+              topic,
+              eventType,
+              result: "failure",
+              durationSeconds: elapsedSeconds(startedAt)
+            });
             this.logger.logFailed({
               topic,
               partition,
@@ -326,4 +378,28 @@ function sleep(delayMs: number): Promise<void> {
 
 function isKafkaTopicName(value: string): value is KafkaTopicName {
   return Object.values(KAFKA_TOPICS).includes(value as KafkaTopicName);
+}
+
+function elapsedSeconds(startedAt: bigint | undefined): number {
+  if (!startedAt) {
+    return 0;
+  }
+
+  return Number(process.hrtime.bigint() - startedAt) / 1_000_000_000;
+}
+
+function getErrorCode(error: unknown): string {
+  if (error instanceof KafkaNonRetryableError) {
+    return error.errorCode;
+  }
+
+  if (error instanceof Error && error.name) {
+    return error.name
+      .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+      .replace(/[^a-zA-Z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .toUpperCase();
+  }
+
+  return "UNKNOWN_ERROR";
 }

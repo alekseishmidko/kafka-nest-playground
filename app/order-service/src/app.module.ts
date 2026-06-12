@@ -7,11 +7,15 @@ import {
   KafkaJsProducerClient,
   KafkaModule
 } from "@kafka-playground/kafka";
-import { createServiceLoggerModule } from "@kafka-playground/observability";
+import {
+  createServiceLoggerModule,
+  MetricsModule
+} from "@kafka-playground/observability";
 import { createOrderServiceDataSourceOptions } from "./database/order-service.data-source";
 import { OrdersModule } from "./modules/orders/orders.module";
 import { join } from "node:path";
 import { DlqModule } from "./modules/dlq/dlq.module";
+import { OperationalMetricsModule } from "./modules/operational-metrics/operational-metrics.module";
 
 loadServiceEnvFiles(join(process.cwd()));
 
@@ -20,6 +24,9 @@ loadServiceEnvFiles(join(process.cwd()));
     createServiceLoggerModule({
       serviceName: "order-service",
       environment: process.env.APP_ENV ?? "local"
+    }),
+    MetricsModule.register({
+      serviceName: "order-service"
     }),
     ConfigModule.forRoot({
       isGlobal: true,
@@ -40,6 +47,7 @@ loadServiceEnvFiles(join(process.cwd()));
           clientId,
           serviceName: "order-service",
           brokers,
+          consumerGroupId: groupId,
           schemaRegistryUrl: configService.getOrThrow<string>("SCHEMA_REGISTRY_URL"),
           producerClient: new KafkaJsProducerClient({
             clientId,
@@ -54,7 +62,8 @@ loadServiceEnvFiles(join(process.cwd()));
       }
     }),
     OrdersModule,
-    DlqModule
+    DlqModule,
+    OperationalMetricsModule
   ]
 })
 export class AppModule {}

@@ -3,7 +3,8 @@ import {
   CreateDateColumn,
   Entity,
   PrimaryGeneratedColumn,
-  UpdateDateColumn
+  UpdateDateColumn,
+  VersionColumn
 } from "typeorm";
 import type {
   DomainEvent,
@@ -124,6 +125,30 @@ export class DeadLetterEventEntity {
 
   @Column({ name: "ignore_reason", type: "text", nullable: true })
   ignoreReason!: string | null;
+
+  /** Идентификатор оператора, выполнившего конечное действие. */
+  @Column({
+    name: "resolved_by",
+    type: "varchar",
+    length: 120,
+    nullable: true
+  })
+  resolvedBy!: string | null;
+
+  /** Обязательный комментарий оператора для аудита reprocess/ignore. */
+  @Column({
+    name: "resolution_comment",
+    type: "text",
+    nullable: true
+  })
+  resolutionComment!: string | null;
+
+  /**
+   * Optimistic version возвращается Admin API и должна передаваться обратно
+   * при изменении записи.
+   */
+  @VersionColumn({ type: "int", default: 1 })
+  version!: number;
 
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt!: Date;

@@ -1,9 +1,10 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 import {
   KAFKA_TOPICS,
   type DeadLetterEvent,
   type DomainEvent
 } from "@kafka-playground/contracts";
+import { ApplicationMetrics } from "@kafka-playground/observability";
 import { randomUUID } from "node:crypto";
 import { KAFKA_MODULE_OPTIONS } from "./kafka.tokens";
 import { KAFKA_HEADER_NAMES } from "./kafka-headers";
@@ -31,7 +32,9 @@ export class KafkaRetryDispatcher {
     private readonly policy: KafkaRetryPolicy,
     private readonly producer: KafkaProducerService,
     @Inject(KAFKA_MODULE_OPTIONS)
-    private readonly options: KafkaModuleOptions
+    private readonly options: KafkaModuleOptions,
+    @Optional()
+    private readonly metrics?: ApplicationMetrics
   ) {}
 
   /**
@@ -61,6 +64,11 @@ export class KafkaRetryDispatcher {
         key: params.context.key ?? params.context.event.eventId,
         event: params.context.event,
         headers
+      });
+      this.metrics?.recordKafkaRetry({
+        originalTopic: decision.originalTopic,
+        destinationTopic: decision.destinationTopic,
+        stage: getRetryStage(decision.destinationTopic)
       });
 
       return decision;
@@ -108,6 +116,10 @@ export class KafkaRetryDispatcher {
       event: deadLetterEvent,
       headers: params.headers
     });
+    this.metrics?.recordKafkaDlq(
+      params.decision.originalTopic,
+      params.decision.errorCode
+    );
   }
 }
 
@@ -148,4 +160,11 @@ function normalizeError(error: unknown): {
     message: String(error),
     stack: null
   };
+}
+
+function getRetryStage(topic: string): string {
+  const marker = ".retry-";
+  const index = topic.lastIndexOf(marker);
+
+  return index === -1 ? "unknown" : topic.slice(index + 1);
 }

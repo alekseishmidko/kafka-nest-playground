@@ -9,6 +9,8 @@ export interface KafkaModuleOptions {
   serviceName: string;
   brokers: string[];
   schemaRegistryUrl: string;
+  /** Consumer group нужна lag collector-у; producer-only сервисы могут не задавать её. */
+  consumerGroupId?: string;
 }
 
 export interface KafkaProducerClient {

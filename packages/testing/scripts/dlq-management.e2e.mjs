@@ -11,6 +11,8 @@ import {
 const RISK_TOPIC = "risk.risk-events";
 const RISK_APPROVED_SUBJECT =
   "risk.risk-events-OrderRiskApproved-value";
+const OPERATOR_API_KEY =
+  process.env.E2E_DLQ_OPERATOR_API_KEY ?? "local-dlq-operator-key";
 
 /**
  * Проверяет полный административный цикл DLQ:
@@ -44,9 +46,11 @@ async function main() {
       "DLQ original topic"
     );
 
-    const reprocessed = await reprocessDlqEvent(dlq.id, {
-      orderId
-    });
+    const reprocessed = await reprocessDlqEvent(
+      dlq.id,
+      dlq.version,
+      { orderId }
+    );
 
     assertEqual(
       reprocessed.status,
@@ -57,6 +61,28 @@ async function main() {
       reprocessed.reprocessedEventId,
       originalEvent.eventId,
       "new eventId"
+    );
+    assertEqual(
+      reprocessed.resolvedBy,
+      "dlq-operator",
+      "operator identity"
+    );
+
+    const auditLog = await waitFor(
+      () => readAuditLog(postgres, dlq.id),
+      `audit log for DLQ row ${dlq.id}`
+    );
+
+    assertEqual(auditLog.action, "REPROCESS", "audit action");
+    assertEqual(
+      auditLog.operator_id,
+      "dlq-operator",
+      "audit operator"
+    );
+    assertEqual(
+      auditLog.reprocessed_event_id,
+      reprocessed.reprocessedEventId,
+      "audit reprocessed eventId"
     );
 
     const outbox = await waitFor(
@@ -85,6 +111,7 @@ async function main() {
         dlqId: dlq.id,
         originalEventId: originalEvent.eventId,
         reprocessedEventId: reprocessed.reprocessedEventId,
+        auditAction: auditLog.action,
         outboxStatus: outbox.status,
         orderId,
         orderStatus: order.status
@@ -98,7 +125,12 @@ async function main() {
 
 async function assertAdminApiIsReachable() {
   const response = await fetch(
-    new URL("/admin/dlq?limit=1", e2eConfig.orderAdminUrl)
+    new URL("/admin/dlq?limit=1", e2eConfig.orderAdminUrl),
+    {
+      headers: {
+        "x-admin-api-key": OPERATOR_API_KEY
+      }
+    }
   );
 
   if (!response.ok) {
@@ -169,15 +201,27 @@ function createInvalidRiskEvent() {
   };
 }
 
-async function reprocessDlqEvent(id, payload) {
+/**
+ * Отправляет административную команду reprocess.
+ *
+ * Версия защищает запись от параллельного изменения другим оператором,
+ * а комментарий сохраняется в неизменяемом журнале аудита.
+ */
+async function reprocessDlqEvent(id, version, payload) {
   const response = await fetch(
     new URL(`/admin/dlq/${id}/reprocess`, e2eConfig.orderAdminUrl),
     {
       method: "POST",
       headers: {
-        "content-type": "application/json"
+        "content-type": "application/json",
+        "x-admin-api-key": OPERATOR_API_KEY
       },
-      body: JSON.stringify({ payload })
+      body: JSON.stringify({
+        payload,
+        version,
+        comment:
+          "Исправление orderId в автоматическом E2E-сценарии"
+      })
     }
   );
   const body = await response.text();
@@ -201,6 +245,7 @@ async function readDlqByOriginalEventId(postgres, eventId) {
         error_code,
         retry_count,
         status,
+        version,
         reprocessed_event_id
       from dead_letter_events
       where original_event_id = $1
@@ -221,6 +266,24 @@ async function readOutboxByEventId(postgres, eventId) {
       where event_id = $1
     `,
     [eventId]
+  );
+
+  return result.rows[0] ?? null;
+}
+
+/**
+ * Читает неизменяемую запись административного действия.
+ */
+async function readAuditLog(postgres, deadLetterEventId) {
+  const result = await postgres.query(
+    `
+      select action, operator_id, reprocessed_event_id, comment
+      from dlq_audit_log
+      where dead_letter_event_id = $1
+      order by created_at desc
+      limit 1
+    `,
+    [deadLetterEventId]
   );
 
   return result.rows[0] ?? null;

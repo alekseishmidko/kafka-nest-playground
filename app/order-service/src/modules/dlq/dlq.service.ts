@@ -27,6 +27,10 @@ import {
   DeadLetterEventEntity,
   DeadLetterEventStatus
 } from "./entities/dead-letter-event.entity";
+import {
+  DlqAuditAction,
+  DlqAuditLogEntity
+} from "./entities/dlq-audit-log.entity";
 
 export interface DeadLetterEventPage {
   items: DeadLetterEventEntity[];
@@ -127,8 +131,14 @@ export class DlqService {
    */
   async reprocess(
     id: string,
-    correctedPayload: CorrectedPayload
+    correctedPayload: CorrectedPayload,
+    params: {
+      expectedVersion: number;
+      operatorId: string;
+      comment: string;
+    }
   ): Promise<DeadLetterEventEntity> {
+    const comment = requireComment(params.comment);
     const result = await this.dataSource.transaction(async (manager) => {
       const entity = await manager.findOne(DeadLetterEventEntity, {
         where: { id },
@@ -140,6 +150,7 @@ export class DlqService {
       }
 
       assertNewStatus(entity);
+      assertExpectedVersion(entity, params.expectedVersion);
 
       if (!entity.originalEvent) {
         throw new UnprocessableEntityException(
@@ -167,9 +178,24 @@ export class DlqService {
       entity.status = DeadLetterEventStatus.Reprocessed;
       entity.reprocessedEventId = reprocessed.event.eventId;
       entity.reprocessedAt = new Date();
+      entity.resolvedBy = params.operatorId;
+      entity.resolutionComment = comment;
+      const savedEntity = await manager.save(entity);
+
+      await manager.save(
+        manager.create(DlqAuditLogEntity, {
+          deadLetterEventId: entity.id,
+          action: DlqAuditAction.Reprocess,
+          operatorId: params.operatorId,
+          previousStatus: DeadLetterEventStatus.New,
+          newStatus: DeadLetterEventStatus.Reprocessed,
+          comment,
+          reprocessedEventId: reprocessed.event.eventId
+        })
+      );
 
       return {
-        entity: await manager.save(entity),
+        entity: savedEntity,
         reprocessedEvent: reprocessed.event
       };
     });
@@ -185,7 +211,8 @@ export class DlqService {
         originalEventId: result.entity.originalEventId,
         reprocessedEventId: result.entity.reprocessedEventId,
         eventType: result.reprocessedEvent.eventType,
-        topic: result.entity.originalTopic
+        topic: result.entity.originalTopic,
+        operatorId: params.operatorId
       },
       "Dead letter event accepted for reprocessing"
     );
@@ -198,15 +225,13 @@ export class DlqService {
    */
   async ignore(
     id: string,
-    reason: string
-  ): Promise<DeadLetterEventEntity> {
-    const normalizedReason = reason.trim();
-
-    if (!normalizedReason) {
-      throw new UnprocessableEntityException(
-        "Ignore reason must not be empty"
-      );
+    reason: string,
+    params: {
+      expectedVersion: number;
+      operatorId: string;
     }
+  ): Promise<DeadLetterEventEntity> {
+    const normalizedReason = requireComment(reason);
 
     return this.dataSource.transaction(async (manager) => {
       const entity = await manager.findOne(DeadLetterEventEntity, {
@@ -219,18 +244,33 @@ export class DlqService {
       }
 
       assertNewStatus(entity);
+      assertExpectedVersion(entity, params.expectedVersion);
 
       entity.status = DeadLetterEventStatus.Ignored;
       entity.ignoredAt = new Date();
       entity.ignoreReason = normalizedReason;
+      entity.resolvedBy = params.operatorId;
+      entity.resolutionComment = normalizedReason;
 
       const saved = await manager.save(entity);
+      await manager.save(
+        manager.create(DlqAuditLogEntity, {
+          deadLetterEventId: entity.id,
+          action: DlqAuditAction.Ignore,
+          operatorId: params.operatorId,
+          previousStatus: DeadLetterEventStatus.New,
+          newStatus: DeadLetterEventStatus.Ignored,
+          comment: normalizedReason,
+          reprocessedEventId: null
+        })
+      );
 
       this.logger.info(
         {
           dlqId: saved.id,
           deadLetterEventId: saved.deadLetterEventId,
-          reason: normalizedReason
+          reason: normalizedReason,
+          operatorId: params.operatorId
         },
         "Dead letter event ignored"
       );
@@ -238,6 +278,38 @@ export class DlqService {
       return saved;
     });
   }
+}
+
+function assertExpectedVersion(
+  entity: DeadLetterEventEntity,
+  expectedVersion: number
+): void {
+  if (
+    !Number.isInteger(expectedVersion) ||
+    expectedVersion < 1
+  ) {
+    throw new UnprocessableEntityException(
+      "version must be a positive integer"
+    );
+  }
+
+  if (entity.version !== expectedVersion) {
+    throw new ConflictException(
+      `DLQ event ${entity.id} version changed from ${expectedVersion} to ${entity.version}`
+    );
+  }
+}
+
+function requireComment(value: string): string {
+  const comment = value.trim();
+
+  if (comment.length < 5 || comment.length > 1000) {
+    throw new UnprocessableEntityException(
+      "Operator comment must contain between 5 and 1000 characters"
+    );
+  }
+
+  return comment;
 }
 
 function assertNewStatus(entity: DeadLetterEventEntity): void {

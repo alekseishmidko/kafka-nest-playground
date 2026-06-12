@@ -71,3 +71,18 @@ test("запрещает публикацию event type в несоответс
     /must be published to risk\.risk-events/
   );
 });
+
+test("запрещает редактировать неизвестные поля payload", () => {
+  assert.throws(
+    () =>
+      createReprocessedEvent(
+        originalEvent,
+        {
+          orderId: "00000000-0000-4000-8000-000000000004",
+          injectedField: "not allowed"
+        },
+        KAFKA_TOPICS.riskRiskEvents
+      ),
+    /injectedField/
+  );
+});

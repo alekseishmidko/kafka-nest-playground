@@ -34,6 +34,10 @@ export function createReprocessedEvent(
   expectedTopic: KafkaTopicName,
   now = new Date()
 ): ReprocessedEventResult {
+  assertOnlyAllowedPayloadFields(
+    originalEvent.eventType,
+    correctedPayload
+  );
   const payload = {
     ...asRecord(originalEvent.payload, "original payload"),
     ...correctedPayload
@@ -62,6 +66,87 @@ export function createReprocessedEvent(
     topic: expectedTopic,
     messageKey: getMessageKey(event)
   };
+}
+
+const ALLOWED_CORRECTED_PAYLOAD_FIELDS: Record<
+  DomainEventType,
+  readonly string[]
+> = {
+  OrderCreated: [
+    "orderId",
+    "userId",
+    "currency",
+    "totalAmount",
+    "itemCount"
+  ],
+  OrderConfirmed: [
+    "orderId",
+    "userId",
+    "currency",
+    "totalAmount",
+    "paymentId",
+    "confirmedAt"
+  ],
+  OrderCancelled: [
+    "orderId",
+    "userId",
+    "reason",
+    "cancelledBy",
+    "cancelledAt"
+  ],
+  OrderRiskApproved: [
+    "orderId",
+    "amount",
+    "currency",
+    "riskScore",
+    "approvedBy"
+  ],
+  OrderRiskRejected: [
+    "orderId",
+    "riskScore",
+    "reason",
+    "rejectedBy"
+  ],
+  PaymentAuthorized: [
+    "paymentId",
+    "orderId",
+    "amount",
+    "currency",
+    "provider"
+  ],
+  PaymentFailed: [
+    "paymentId",
+    "orderId",
+    "reason",
+    "provider"
+  ],
+  NotificationCommand: [
+    "notificationId",
+    "recipient",
+    "channel",
+    "template",
+    "dataJson"
+  ],
+  DeadLetterEvent: []
+};
+
+/**
+ * Запрещает произвольное расширение payload через Admin API.
+ */
+function assertOnlyAllowedPayloadFields(
+  eventType: DomainEventType,
+  correctedPayload: CorrectedPayload
+): void {
+  const allowedFields = ALLOWED_CORRECTED_PAYLOAD_FIELDS[eventType] ?? [];
+  const unknownFields = Object.keys(correctedPayload).filter(
+    (field) => !allowedFields.includes(field)
+  );
+
+  if (unknownFields.length > 0) {
+    throw new UnprocessableEntityException(
+      `Payload fields are not editable for ${eventType}: ${unknownFields.join(", ")}`
+    );
+  }
 }
 
 /**
