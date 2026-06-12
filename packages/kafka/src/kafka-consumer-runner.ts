@@ -1,5 +1,13 @@
-import { Inject, Injectable } from "@nestjs/common";
-import type { DomainEvent } from "@kafka-playground/contracts";
+import {
+  Inject,
+  Injectable,
+  type OnApplicationBootstrap
+} from "@nestjs/common";
+import {
+  KAFKA_TOPICS,
+  type DomainEvent,
+  type KafkaTopicName
+} from "@kafka-playground/contracts";
 import { KAFKA_CONSUMER_CLIENT, SCHEMA_REGISTRY_CODEC } from "./kafka.tokens";
 import { readHeader, KAFKA_HEADER_NAMES } from "./kafka-headers";
 import { KafkaEventLogger } from "./kafka-logger";
@@ -12,9 +20,25 @@ import type {
   SchemaRegistryCodec
 } from "./types";
 
+interface KafkaConsumerRegistration {
+  topics: KafkaTopicName[];
+  fromBeginning: boolean;
+  handler: KafkaConsumeHandler;
+}
+
+/**
+ * Координирует все Kafka-подписки одного NestJS-процесса.
+ *
+ * KafkaJS допускает только один активный `consumer.run()` для экземпляра
+ * consumer-а. Поэтому feature-consumers регистрируют свои handler-ы во время
+ * `onModuleInit`, а runner запускает единый loop после инициализации всех
+ * модулей. Это позволяет добавлять независимые consumers без гонок запуска.
+ */
 @Injectable()
-export class KafkaConsumerRunner {
+export class KafkaConsumerRunner implements OnApplicationBootstrap {
   private readonly retryInMs = 5000;
+  private readonly registrations: KafkaConsumerRegistration[] = [];
+  private started = false;
 
   constructor(
     @Inject(KAFKA_CONSUMER_CLIENT)
@@ -26,6 +50,21 @@ export class KafkaConsumerRunner {
     private readonly retryDispatcher: KafkaRetryDispatcher
   ) {}
 
+  /**
+   * Запускает единый KafkaJS loop после регистрации NestJS feature-consumers.
+   */
+  onApplicationBootstrap(): void {
+    if (this.registrations.length === 0 || this.started) {
+      return;
+    }
+
+    this.started = true;
+    void this.startWithRetry();
+  }
+
+  /**
+   * Регистрирует handler одного основного topic.
+   */
   async subscribe<TEvent extends DomainEvent>(
     options: {
       topic: KafkaConsumerMessageContext<TEvent>["topic"];
@@ -33,15 +72,19 @@ export class KafkaConsumerRunner {
     },
     handler: KafkaConsumeHandler<TEvent>
   ): Promise<void> {
-    await this.subscribeMany(
-      {
-        topics: [options.topic],
-        fromBeginning: options.fromBeginning
-      },
+    this.register(
+      [options.topic],
+      options.fromBeginning,
       handler
     );
   }
 
+  /**
+   * Регистрирует один handler для нескольких основных topics.
+   *
+   * Метод намеренно не вызывает `consumer.run()`: запуск до завершения
+   * инициализации NestJS не позволил бы безопасно добавить второй consumer.
+   */
   async subscribeMany<TEvent extends DomainEvent>(
     options: {
       topics: Array<KafkaConsumerMessageContext<TEvent>["topic"]>;
@@ -49,35 +92,75 @@ export class KafkaConsumerRunner {
     },
     handler: KafkaConsumeHandler<TEvent>
   ): Promise<void> {
-    void this.startWithRetry(options, handler);
+    this.register(
+      options.topics,
+      options.fromBeginning,
+      handler
+    );
   }
 
-  private async startWithRetry<TEvent extends DomainEvent>(
-    options: {
-      topics: Array<KafkaConsumerMessageContext<TEvent>["topic"]>;
-      fromBeginning?: boolean;
-    },
+  private register<TEvent extends DomainEvent>(
+    topics: KafkaTopicName[],
+    fromBeginning: boolean | undefined,
     handler: KafkaConsumeHandler<TEvent>
-  ): Promise<void> {
+  ): void {
+    if (this.started) {
+      throw new Error(
+        "Kafka subscriptions must be registered before application bootstrap"
+      );
+    }
+
+    const duplicateTopic = topics.find((topic) =>
+      this.registrations.some((registration) =>
+        registration.topics.includes(topic)
+      )
+    );
+
+    if (duplicateTopic) {
+      throw new Error(
+        `Kafka handler is already registered for topic ${duplicateTopic}`
+      );
+    }
+
+    this.registrations.push({
+      topics,
+      fromBeginning: fromBeginning ?? false,
+      handler: handler as KafkaConsumeHandler
+    });
+  }
+
+  private async startWithRetry(): Promise<void> {
+    const sourceTopics = [
+      ...new Set(
+        this.registrations.flatMap((registration) => registration.topics)
+      )
+    ];
+
     try {
       const subscriptionTopics = [
         ...new Set(
-          options.topics.flatMap((topic) =>
+          sourceTopics.flatMap((topic) =>
             this.retryPolicy.getSubscriptionTopics(topic)
           )
         )
       ];
 
       for (const topic of subscriptionTopics) {
+        const fromBeginning = this.registrations.some(
+          (registration) =>
+            registration.fromBeginning &&
+            registration.topics.includes(topic)
+        );
+
         await this.consumer.subscribe({
           topic,
-          fromBeginning: options.fromBeginning
+          fromBeginning
         });
       }
 
       await this.consumer.run({
         eachMessage: async ({ topic, partition, heartbeat, message }) => {
-          let event: TEvent | undefined;
+          let event: DomainEvent | undefined;
 
           try {
             await delayWithHeartbeat(
@@ -89,10 +172,11 @@ export class KafkaConsumerRunner {
               throw new Error("Kafka message value is empty");
             }
 
-            const decodedEvent = await this.codec.deserialize<TEvent>(message.value);
+            const decodedEvent =
+              await this.codec.deserialize<DomainEvent>(message.value);
             event = decodedEvent;
 
-            const context: KafkaConsumerMessageContext<TEvent> = {
+            const context: KafkaConsumerMessageContext = {
               topic,
               partition,
               offset: message.offset,
@@ -110,6 +194,14 @@ export class KafkaConsumerRunner {
               offset: message.offset,
               event: decodedEvent
             });
+
+            const handler = this.resolveHandler(topic, message.headers);
+
+            if (!handler) {
+              throw new Error(
+                `Kafka handler is not registered for topic ${topic}`
+              );
+            }
 
             await handler(context);
           } catch (error) {
@@ -134,7 +226,7 @@ export class KafkaConsumerRunner {
               throw error;
             }
 
-            const context: KafkaConsumerMessageContext<TEvent> = {
+            const context: KafkaConsumerMessageContext = {
               topic,
               partition,
               offset: message.offset,
@@ -157,15 +249,48 @@ export class KafkaConsumerRunner {
       });
     } catch (error) {
       this.logger.logConsumerStartFailed({
-        topics: options.topics,
+        topics: sourceTopics,
         retryInMs: this.retryInMs,
         error
       });
 
       setTimeout(() => {
-        void this.startWithRetry(options, handler);
+        void this.startWithRetry();
       }, this.retryInMs);
     }
+  }
+
+  /**
+   * Находит feature-handler для основного или retry topic.
+   *
+   * Retry topics общие для нескольких источников. Заголовок
+   * `x-original-topic` возвращает сообщение к handler-у того topic, где
+   * произошла первая ошибка.
+   */
+  private resolveHandler(
+    currentTopic: KafkaTopicName,
+    headers: KafkaConsumerMessageContext["headers"] | undefined
+  ): KafkaConsumeHandler | undefined {
+    const directRegistration = this.registrations.find(
+      (registration) => registration.topics.includes(currentTopic)
+    );
+
+    if (directRegistration) {
+      return directRegistration.handler;
+    }
+
+    const originalTopic = readHeader(
+      headers,
+      KAFKA_HEADER_NAMES.originalTopic
+    );
+    const handlerTopic =
+      originalTopic && isKafkaTopicName(originalTopic)
+        ? originalTopic
+        : currentTopic;
+
+    return this.registrations.find((registration) =>
+      registration.topics.includes(handlerTopic)
+    )?.handler;
   }
 }
 
@@ -197,4 +322,8 @@ function sleep(delayMs: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, delayMs);
   });
+}
+
+function isKafkaTopicName(value: string): value is KafkaTopicName {
+  return Object.values(KAFKA_TOPICS).includes(value as KafkaTopicName);
 }

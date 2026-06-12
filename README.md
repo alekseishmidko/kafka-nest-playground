@@ -49,6 +49,7 @@ pnpm dev:risk-service-go
 | Gateway API | `http://localhost:3000` | Публичный HTTP API |
 | Swagger UI | `http://localhost:3000/docs` | Документация Gateway API |
 | Order service | `localhost:50052` | gRPC |
+| Order DLQ Admin API | `http://localhost:3003/admin/dlq` | Внутреннее управление DLQ |
 | Risk service Go | `http://localhost:3002` | Health/ready endpoints |
 | Kafka | `localhost:9092` | Broker |
 | Kafka UI | `http://localhost:8080` | Просмотр topics и consumer groups |
@@ -96,6 +97,11 @@ Consumer автоматически подписывается на retry topics
 исходный topic, время первой ошибки и код последней ошибки передаются в Kafka
 headers. Подробности реализации и ручной проверки описаны в
 [packages/kafka/README.md](./packages/kafka/README.md).
+
+События из `dead-letter.events` сохраняются в PostgreSQL. Внутренний Admin API
+позволяет просмотреть запись, исправить payload и поставить новую копию события
+в transactional outbox либо пометить событие как проигнорированное. Подробное
+описание находится в [app/order-service/README.md](./app/order-service/README.md).
 
 ## Проверки
 

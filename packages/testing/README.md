@@ -102,3 +102,32 @@ E2E_POSTGRES_DB=kafka_playground
 E2E_TIMEOUT_MS=60000
 E2E_POLL_INTERVAL_MS=500
 ```
+
+## DLQ Management E2E
+
+Сценарий проверяет полный административный цикл:
+
+```text
+невалидное risk-событие
+ -> DeadLetterEvent
+ -> dead_letter_events
+ -> POST /admin/dlq/:id/reprocess
+ -> outbox_events
+ -> risk.risk-events
+ -> заказ RISK_APPROVED
+```
+
+Запуск:
+
+```bash
+pnpm test:e2e:dlq-management
+```
+
+Дополнительная настройка:
+
+```env
+E2E_ORDER_ADMIN_URL=http://localhost:3003
+```
+
+Требуются запущенные Kafka, Schema Registry, PostgreSQL и `order-service`.
+Миграция `dead_letter_events` должна быть применена.

@@ -6,6 +6,8 @@ import { OutboxEventEntity } from "../modules/orders/entities/outbox-event.entit
 import { ProcessedKafkaEventEntity } from "../modules/orders/entities/processed-kafka-event.entity";
 import { CreateOrderServiceSchema1717977600000 } from "./migrations/1717977600000-create-order-service-schema";
 import { AddFinalOrderStatuses1718064000000 } from "./migrations/1718064000000-add-final-order-statuses";
+import { CreateDeadLetterEvents1718150400000 } from "./migrations/1718150400000-create-dead-letter-events";
+import { DeadLetterEventEntity } from "../modules/dlq/entities/dead-letter-event.entity";
 
 loadServiceEnvFiles(join(process.cwd()));
 
@@ -29,10 +31,16 @@ export function createOrderServiceDataSourceOptions(): DataSourceOptions {
         : false,
     synchronize: false,
     migrationsRun: readBooleanEnv("TYPEORM_MIGRATIONS_RUN", true),
-    entities: [OrderEntity, OutboxEventEntity, ProcessedKafkaEventEntity],
+    entities: [
+      OrderEntity,
+      OutboxEventEntity,
+      ProcessedKafkaEventEntity,
+      DeadLetterEventEntity
+    ],
     migrations: [
       CreateOrderServiceSchema1717977600000,
-      AddFinalOrderStatuses1718064000000
+      AddFinalOrderStatuses1718064000000,
+      CreateDeadLetterEvents1718150400000
     ]
   };
 }
