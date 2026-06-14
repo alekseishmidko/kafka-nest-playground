@@ -2,6 +2,11 @@ import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import {
+  captureActiveTraceContext,
+  runInTraceSpan,
+  SpanKind
+} from "@kafka-playground/observability";
+import {
   EVENT_TOPIC_MAP,
   type KafkaTopicName,
   type OrderCreatedEvent
@@ -97,34 +102,47 @@ export class OrdersRepository {
   async createPendingOrderWithOutbox(
     params: CreatePendingOrderWithOutboxParams
   ): Promise<{ order: OrderEntity; event: OrderCreatedEvent }> {
-    return this.repository.manager.transaction(async (manager) => {
-      const order = manager.create(OrderEntity, {
-        userId: params.userId,
-        currency: params.currency,
-        totalAmount: params.totalAmount.toFixed(2),
-        itemCount: params.itemCount,
-        status: OrderStatus.Pending,
-        items: params.items
-      });
-      const savedOrder = await manager.save(order);
-      const event = params.createEvent(savedOrder);
+    return runInTraceSpan(
+      "postgres transaction create order",
+      {
+        kind: SpanKind.INTERNAL,
+        attributes: {
+          "db.system": "postgresql",
+          "db.operation.name": "transaction",
+          "outbox.event.type": "OrderCreated"
+        }
+      },
+      () =>
+        this.repository.manager.transaction(async (manager) => {
+          const order = manager.create(OrderEntity, {
+            userId: params.userId,
+            currency: params.currency,
+            totalAmount: params.totalAmount.toFixed(2),
+            itemCount: params.itemCount,
+            status: OrderStatus.Pending,
+            items: params.items
+          });
+          const savedOrder = await manager.save(order);
+          const event = params.createEvent(savedOrder);
 
-      await manager.save(
-        manager.create(OutboxEventEntity, {
-          topic: EVENT_TOPIC_MAP.OrderCreated,
-          messageKey: savedOrder.id,
-          eventType: event.eventType,
-          eventId: event.eventId,
-          event,
-          status: OutboxEventStatus.Pending
+          await manager.save(
+            manager.create(OutboxEventEntity, {
+              topic: EVENT_TOPIC_MAP.OrderCreated,
+              messageKey: savedOrder.id,
+              eventType: event.eventType,
+              eventId: event.eventId,
+              event,
+              traceContext: captureActiveTraceContext(),
+              status: OutboxEventStatus.Pending
+            })
+          );
+
+          return {
+            order: savedOrder,
+            event
+          };
         })
-      );
-
-      return {
-        order: savedOrder,
-        event
-      };
-    });
+    );
   }
 
   /**
@@ -146,7 +164,19 @@ export class OrdersRepository {
   async processLifecycleEvent(
     params: ProcessLifecycleEventParams
   ): Promise<OrderLifecycleProcessingResult> {
-    return this.repository.manager.transaction(async (manager) => {
+    return runInTraceSpan(
+      "postgres transaction process order event",
+      {
+        kind: SpanKind.INTERNAL,
+        attributes: {
+          "db.system": "postgresql",
+          "db.operation.name": "transaction",
+          "event.type": params.event.eventType,
+          "event.id": params.event.eventId,
+          "order.id": params.orderId
+        }
+      },
+      () => this.repository.manager.transaction(async (manager) => {
       const inserted = await manager.query(
         `
           insert into processed_kafka_events (
@@ -219,6 +249,7 @@ export class OrdersRepository {
             eventType: finalEvent.eventType,
             eventId: finalEvent.eventId,
             event: finalEvent,
+            traceContext: captureActiveTraceContext(),
             status: OutboxEventStatus.Pending
           })
         );
@@ -230,7 +261,8 @@ export class OrdersRepository {
         status: updatedOrder.status,
         finalEvent
       };
-    });
+      })
+    );
   }
 }
 

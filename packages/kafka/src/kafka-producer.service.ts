@@ -1,5 +1,10 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { EVENT_SCHEMA_SUBJECTS } from "@kafka-playground/contracts";
+import {
+  injectTraceContext,
+  runInTraceSpan,
+  SpanKind
+} from "@kafka-playground/observability";
 import { buildKafkaHeaders } from "./kafka-headers";
 import { KafkaEventLogger } from "./kafka-logger";
 import { KAFKA_PRODUCER_CLIENT, SCHEMA_REGISTRY_CODEC } from "./kafka.tokens";
@@ -20,32 +25,60 @@ export class KafkaProducerService {
   ) {}
 
   async publish(options: KafkaPublishOptions): Promise<void> {
-    const value = await this.codec.serialize(this.getSubject(options), options.event);
-    const headers = buildKafkaHeaders(options.event, {
-      ...options.headers,
-      "x-correlation-id": options.correlationId ?? options.event.correlationId,
-      "x-causation-id": options.causationId ?? options.event.causationId ?? undefined
-    });
-
-    const metadata = await this.producer.send({
-      topic: options.topic,
-      messages: [
-        {
-          key: options.key,
-          value,
-          headers
+    return runInTraceSpan(
+      `${options.topic} publish`,
+      {
+        kind: SpanKind.PRODUCER,
+        attributes: {
+          "messaging.system": "kafka",
+          "messaging.destination.name": options.topic,
+          "messaging.operation.name": "publish",
+          "messaging.message.id": options.event.eventId,
+          "messaging.kafka.message.key": options.key,
+          "event.type": options.event.eventType
         }
-      ]
-    });
+      },
+      async () => {
+        const value = await this.codec.serialize(
+          this.getSubject(options),
+          options.event
+        );
+        const traceHeaders = injectTraceContext({});
+        const headers = buildKafkaHeaders(options.event, {
+          ...options.headers,
+          ...traceHeaders,
+          "x-correlation-id":
+            options.correlationId ?? options.event.correlationId,
+          "x-causation-id":
+            options.causationId ??
+            options.event.causationId ??
+            undefined
+        });
 
-    const firstRecord = metadata[0];
+        const metadata = await this.producer.send({
+          topic: options.topic,
+          messages: [
+            {
+              key: options.key,
+              value,
+              headers
+            }
+          ]
+        });
 
-    this.logger.logProduced({
-      topic: firstRecord?.topicName ?? firstRecord?.topic ?? options.topic,
-      partition: firstRecord?.partition,
-      offset: firstRecord?.offset,
-      event: options.event
-    });
+        const firstRecord = metadata[0];
+
+        this.logger.logProduced({
+          topic:
+            firstRecord?.topicName ??
+            firstRecord?.topic ??
+            options.topic,
+          partition: firstRecord?.partition,
+          offset: firstRecord?.offset,
+          event: options.event
+        });
+      }
+    );
   }
 
   private getSubject(options: KafkaPublishOptions): string {

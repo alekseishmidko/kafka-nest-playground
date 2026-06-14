@@ -44,6 +44,36 @@ curl http://localhost:3003/metrics
 Основные выражения и правила cardinality описаны в
 [`packages/observability/README.md`](../../packages/observability/README.md).
 
+## Distributed tracing
+
+```text
+HTTP POST /orders
+ -> gRPC OrdersService/CreateOrder
+ -> postgres transaction create order
+ -> outbox_events.trace_context
+ -> outbox publish
+ -> Kafka producer
+ -> Kafka consumer
+ -> postgres transaction process order event
+```
+
+`trace_context` хранится в outbox как JSONB. Фоновый publisher выполняется
+после завершения gRPC-запроса и может стартовать после рестарта, поэтому без
+persisted context Kafka-публикация стала бы корнем нового trace.
+
+Tracing metadata не добавляется в domain event и Avro contract. Она хранится
+только в Kafka headers и техническом поле outbox.
+
+Явные spans:
+
+- `postgres transaction create order`;
+- `postgres transaction process order event`;
+- `outbox publish`;
+- `dlq reprocess`;
+- `dlq ignore`.
+
+Внутри них `pg` instrumentation создаёт spans конкретных SQL-запросов.
+
 ## DLQ: принцип работы
 
 ```text
@@ -238,6 +268,9 @@ pnpm test:e2e:dlq-management
 запущен `order-service`. Тест создаёт изолированный заказ напрямую в PostgreSQL,
 публикует неисправимое risk-событие, исправляет его через Admin API и проверяет
 успешный переход заказа в `RISK_APPROVED`.
+
+Тест также проводит известный `traceId` по цепочке
+`retry-5s -> DLQ -> reprocess -> outbox -> Kafka`.
 
 ## Безопасность
 

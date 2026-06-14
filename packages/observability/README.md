@@ -104,3 +104,32 @@ max by (group, topic) (kafka_consumer_lag)
 ```bash
 pnpm --filter @kafka-playground/observability test
 ```
+
+## OpenTelemetry tracing
+
+Пакет централизует инициализацию OpenTelemetry для всех Node.js сервисов.
+Каждый `main.ts` первым импортирует `tracing-bootstrap.ts`, поэтому
+instrumentation подключается до загрузки HTTP, gRPC, NestJS, TypeORM и `pg`.
+
+Автоматические spans создаются для HTTP, gRPC, NestJS и PostgreSQL. Kafka
+инструментируется вручную в `packages/kafka`, где доступны `eventId`, тип
+события, retry stage и DLQ semantics.
+
+| Функция | Назначение |
+| --- | --- |
+| `initializeTracing()` | Запускает NodeSDK и OTLP exporter |
+| `runInTraceSpan()` | Выполняет операцию внутри span и фиксирует ошибки |
+| `captureActiveTraceContext()` | Сериализует W3C context для outbox |
+| `extractTraceContext()` | Восстанавливает parent из headers или JSONB |
+| `injectTraceContext()` | Добавляет W3C и диагностические headers |
+| `getActiveTraceLogFields()` | Возвращает `traceId`/`spanId` для логов |
+
+Настройки:
+
+```env
+OTEL_TRACING_ENABLED=true
+OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4318/v1/traces
+```
+
+Pino `mixin` автоматически добавляет активные `traceId` и `spanId` в
+структурированные логи. По `traceId` можно перейти от ошибки к trace в Grafana.

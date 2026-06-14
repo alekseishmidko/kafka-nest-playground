@@ -11,6 +11,7 @@ import { DeadLetterEventEntity } from "../modules/dlq/entities/dead-letter-event
 import { DlqAuditLogEntity } from "../modules/dlq/entities/dlq-audit-log.entity";
 import { AddDlqSecurityAudit1718236800000 } from "./migrations/1718236800000-add-dlq-security-audit";
 import { AddDlqRetentionIndex1718323200000 } from "./migrations/1718323200000-add-dlq-retention-index";
+import { AddOutboxTraceContext1718409600000 } from "./migrations/1718409600000-add-outbox-trace-context";
 
 loadServiceEnvFiles(join(process.cwd()));
 
@@ -46,7 +47,8 @@ export function createOrderServiceDataSourceOptions(): DataSourceOptions {
       AddFinalOrderStatuses1718064000000,
       CreateDeadLetterEvents1718150400000,
       AddDlqSecurityAudit1718236800000,
-      AddDlqRetentionIndex1718323200000
+      AddDlqRetentionIndex1718323200000,
+      AddOutboxTraceContext1718409600000
     ]
   };
 }

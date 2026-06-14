@@ -4,7 +4,11 @@ import {
   type DeadLetterEvent,
   type DomainEvent
 } from "@kafka-playground/contracts";
-import { ApplicationMetrics } from "@kafka-playground/observability";
+import {
+  ApplicationMetrics,
+  runInTraceSpan,
+  SpanKind
+} from "@kafka-playground/observability";
 import { randomUUID } from "node:crypto";
 import { KAFKA_MODULE_OPTIONS } from "./kafka.tokens";
 import { KAFKA_HEADER_NAMES } from "./kafka-headers";
@@ -59,12 +63,26 @@ export class KafkaRetryDispatcher {
     );
 
     if (!decision.terminal) {
-      await this.producer.publish({
-        topic: decision.destinationTopic,
-        key: params.context.key ?? params.context.event.eventId,
-        event: params.context.event,
-        headers
-      });
+      await runInTraceSpan(
+        "kafka retry dispatch",
+        {
+          kind: SpanKind.PRODUCER,
+          attributes: {
+            "messaging.system": "kafka",
+            "messaging.destination.name": decision.destinationTopic,
+            "messaging.operation.name": "retry",
+            "retry.count": decision.retryCount,
+            "event.id": params.context.event.eventId
+          }
+        },
+        () =>
+          this.producer.publish({
+            topic: decision.destinationTopic,
+            key: params.context.key ?? params.context.event.eventId,
+            event: params.context.event,
+            headers
+          })
+      );
       this.metrics?.recordKafkaRetry({
         originalTopic: decision.originalTopic,
         destinationTopic: decision.destinationTopic,
@@ -74,12 +92,27 @@ export class KafkaRetryDispatcher {
       return decision;
     }
 
-    await this.publishDeadLetter({
-      context: params.context,
-      error: params.error,
-      decision,
-      headers
-    });
+    await runInTraceSpan(
+      "kafka dlq dispatch",
+      {
+        kind: SpanKind.PRODUCER,
+        attributes: {
+          "messaging.system": "kafka",
+          "messaging.destination.name": KAFKA_TOPICS.deadLetterEvents,
+          "messaging.operation.name": "dead_letter",
+          "retry.count": decision.retryCount,
+          "error.code": decision.errorCode,
+          "event.id": params.context.event.eventId
+        }
+      },
+      () =>
+        this.publishDeadLetter({
+          context: params.context,
+          error: params.error,
+          decision,
+          headers
+        })
+    );
 
     return decision;
   }

@@ -93,6 +93,20 @@ Heartbeat нужен, чтобы broker не исключил consumer из cons
 - `x-event-type`;
 - `x-event-version`.
 
+### Tracing headers
+
+| Header | Назначение |
+| --- | --- |
+| `traceparent` | Стандартный W3C parent context |
+| `tracestate` | Vendor-specific W3C state |
+| `x-trace-id` | Trace id для Kafka UI и диагностики |
+| `x-span-id` | Span producer-а, записавшего сообщение |
+
+Producer создаёт `<topic> publish` с `SpanKind.PRODUCER`. Consumer
+восстанавливает parent и создаёт `<topic> process` с `SpanKind.CONSUMER`.
+Retry создаёт дочерний `kafka retry dispatch`, а терминальный переход -
+`kafka dlq dispatch`. Все этапы сохраняют один `traceId`.
+
 ## Ответственность компонентов
 
 ### `KafkaRetryPolicy`

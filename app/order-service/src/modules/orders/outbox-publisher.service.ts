@@ -2,7 +2,10 @@ import { Injectable, OnApplicationShutdown, OnModuleInit } from "@nestjs/common"
 import { KafkaProducerService } from "@kafka-playground/kafka";
 import {
   ApplicationMetrics,
-  PinoLogger
+  extractTraceContext,
+  PinoLogger,
+  runInTraceSpan,
+  SpanKind
 } from "@kafka-playground/observability";
 import { OutboxRepository } from "./outbox.repository";
 
@@ -87,51 +90,81 @@ export class OutboxPublisherService implements OnModuleInit, OnApplicationShutdo
       const events = await this.outboxRepository.findPublishable(this.batchSize);
 
       for (const outboxEvent of events) {
-        try {
-          await this.kafkaProducer.publish({
-            topic: outboxEvent.topic,
-            key: outboxEvent.messageKey,
-            event: outboxEvent.event,
-            correlationId: outboxEvent.event.correlationId,
-            causationId: outboxEvent.event.causationId ?? undefined
-          });
+        const parentContext = extractTraceContext(
+          outboxEvent.traceContext
+        );
 
-          await this.outboxRepository.markPublished(outboxEvent.id);
-          this.metrics.recordOutboxPublish(
-            outboxEvent.topic,
-            "success"
-          );
+        await runInTraceSpan(
+          "outbox publish",
+          {
+            kind: SpanKind.PRODUCER,
+            parentContext,
+            attributes: {
+              "messaging.system": "kafka",
+              "messaging.destination.name": outboxEvent.topic,
+              "messaging.operation.name": "publish",
+              "outbox.event.id": outboxEvent.id,
+              "event.id": outboxEvent.eventId,
+              "event.type": outboxEvent.eventType
+            }
+          },
+          async () => {
+            try {
+              await this.kafkaProducer.publish({
+                topic: outboxEvent.topic,
+                key: outboxEvent.messageKey,
+                event: outboxEvent.event,
+                correlationId: outboxEvent.event.correlationId,
+                causationId:
+                  outboxEvent.event.causationId ?? undefined
+              });
 
-          this.logger.info(
-            {
-              outboxEventId: outboxEvent.id,
-              eventId: outboxEvent.eventId,
-              eventType: outboxEvent.eventType,
-              topic: outboxEvent.topic
-            },
-            "Outbox event published"
-          );
-        } catch (error) {
-          const attempts = outboxEvent.attempts + 1;
+              await this.outboxRepository.markPublished(outboxEvent.id);
+              this.metrics.recordOutboxPublish(
+                outboxEvent.topic,
+                "success"
+              );
 
-          await this.outboxRepository.markFailed(outboxEvent.id, attempts, error);
-          this.metrics.recordOutboxPublish(
-            outboxEvent.topic,
-            "failure"
-          );
+              this.logger.info(
+                {
+                  outboxEventId: outboxEvent.id,
+                  eventId: outboxEvent.eventId,
+                  eventType: outboxEvent.eventType,
+                  topic: outboxEvent.topic
+                },
+                "Outbox event published"
+              );
+            } catch (error) {
+              const attempts = outboxEvent.attempts + 1;
 
-          this.logger.warn(
-            {
-              outboxEventId: outboxEvent.id,
-              eventId: outboxEvent.eventId,
-              eventType: outboxEvent.eventType,
-              topic: outboxEvent.topic,
-              attempts,
-              error
-            },
-            "Outbox event publish failed"
-          );
-        }
+              await this.outboxRepository.markFailed(
+                outboxEvent.id,
+                attempts,
+                error
+              );
+              this.metrics.recordOutboxPublish(
+                outboxEvent.topic,
+                "failure"
+              );
+
+              this.logger.warn(
+                {
+                  outboxEventId: outboxEvent.id,
+                  eventId: outboxEvent.eventId,
+                  eventType: outboxEvent.eventType,
+                  topic: outboxEvent.topic,
+                  attempts,
+                  error
+                },
+                "Outbox event publish failed"
+              );
+              throw error;
+            }
+          }
+        ).catch(() => {
+          // Ошибка уже сохранена в outbox и записана в span. Следующая запись
+          // пачки должна продолжить публикацию независимо от текущей.
+        });
       }
     } finally {
       this.isPublishing = false;

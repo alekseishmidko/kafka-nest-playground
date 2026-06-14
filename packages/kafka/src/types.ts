@@ -75,6 +75,10 @@ export interface KafkaConsumerMessageContext<TEvent extends DomainEvent = Domain
   headers: KafkaHeaders;
   event: TEvent;
   correlationId: string;
+  /** Trace id активного consumer span для логов и диагностических API. */
+  traceId?: string;
+  /** Span id активного consumer span. */
+  spanId?: string;
 }
 
 export interface SchemaRegistryCodec {
