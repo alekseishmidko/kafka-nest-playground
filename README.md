@@ -57,6 +57,7 @@ pnpm dev:risk-service-go
 | PostgreSQL | `localhost:5432` | Хранилище заказов |
 | Grafana | `http://localhost:3001` | При `GRAFANA_PORT=3001` |
 | Prometheus | `http://localhost:9090` | Метрики |
+| Tempo | `http://localhost:3200` | Хранилище distributed traces |
 | Order metrics | `http://localhost:3003/metrics` | Kafka, outbox, DLQ и Node.js metrics |
 
 `payment-service`, `risk-service` и `notification-service` являются Kafka
@@ -130,6 +131,20 @@ Alert rules находятся в
 ```bash
 pnpm infra:up
 ```
+
+## Distributed tracing
+
+```text
+Node.js services -> OTLP HTTP :4318 -> OpenTelemetry Collector
+                 -> OTLP gRPC -> Tempo -> Grafana
+```
+
+В Grafana откройте `Explore`, выберите datasource `Tempo` и выполните поиск по
+`traceId` из структурированного лога или Kafka header `x-trace-id`.
+
+Трассируется путь HTTP/gRPC, outbox, Kafka producer/consumer, retry, DLQ,
+reprocess и PostgreSQL. Контекст outbox хранится в БД, поэтому trace не
+обрывается при асинхронной публикации или рестарте order-service.
 
 ## Проверки
 

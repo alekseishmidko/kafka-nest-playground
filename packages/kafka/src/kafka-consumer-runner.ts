@@ -9,7 +9,14 @@ import {
   type DomainEvent,
   type KafkaTopicName
 } from "@kafka-playground/contracts";
-import { ApplicationMetrics } from "@kafka-playground/observability";
+import {
+  ApplicationMetrics,
+  extractTraceContext,
+  getActiveTraceLogFields,
+  markActiveSpanAsFailed,
+  runInTraceSpan,
+  SpanKind
+} from "@kafka-playground/observability";
 import { KafkaNonRetryableError } from "./kafka-errors";
 import { KAFKA_CONSUMER_CLIENT, SCHEMA_REGISTRY_CODEC } from "./kafka.tokens";
 import { readHeader, KAFKA_HEADER_NAMES } from "./kafka-headers";
@@ -180,123 +187,158 @@ export class KafkaConsumerRunner implements OnApplicationBootstrap {
 
       await this.consumer.run({
         eachMessage: async ({ topic, partition, heartbeat, message }) => {
-          let event: DomainEvent | undefined;
-          let startedAt: bigint | undefined;
+          const parentContext = extractTraceContext(message.headers);
 
-          try {
-            await delayWithHeartbeat(
-              this.retryPolicy.getDelayMs(topic),
-              heartbeat
-            );
-            startedAt = process.hrtime.bigint();
+          await runInTraceSpan(
+            `${topic} process`,
+            {
+              kind: SpanKind.CONSUMER,
+              parentContext,
+              attributes: {
+                "messaging.system": "kafka",
+                "messaging.destination.name": topic,
+                "messaging.operation.name": "process",
+                "messaging.kafka.destination.partition": partition,
+                "messaging.kafka.message.offset": message.offset,
+                "messaging.kafka.message.key":
+                  message.key?.toString("utf8") ?? ""
+              }
+            },
+            async () => {
+              let event: DomainEvent | undefined;
+              let startedAt: bigint | undefined;
 
-            if (!message.value) {
-              throw new Error("Kafka message value is empty");
+              try {
+                await delayWithHeartbeat(
+                  this.retryPolicy.getDelayMs(topic),
+                  heartbeat
+                );
+                startedAt = process.hrtime.bigint();
+
+                if (!message.value) {
+                  throw new Error("Kafka message value is empty");
+                }
+
+                const decodedEvent =
+                  await this.codec.deserialize<DomainEvent>(message.value);
+                event = decodedEvent;
+                const traceFields = getActiveTraceLogFields();
+                const consumerContext: KafkaConsumerMessageContext = {
+                  topic,
+                  partition,
+                  offset: message.offset,
+                  key: message.key?.toString("utf8") ?? null,
+                  headers: message.headers ?? {},
+                  event: decodedEvent,
+                  correlationId:
+                    readHeader(
+                      message.headers,
+                      KAFKA_HEADER_NAMES.correlationId
+                    ) ?? decodedEvent.correlationId,
+                  ...traceFields
+                };
+
+                this.logger.logConsumed({
+                  topic,
+                  partition,
+                  offset: message.offset,
+                  event: decodedEvent
+                });
+
+                const handler = this.resolveHandler(
+                  topic,
+                  message.headers
+                );
+
+                if (!handler) {
+                  throw new Error(
+                    `Kafka handler is not registered for topic ${topic}`
+                  );
+                }
+
+                await handler(consumerContext);
+
+                this.metrics?.recordKafkaConsumed(
+                  topic,
+                  decodedEvent.eventType
+                );
+                this.metrics?.observeKafkaProcessing({
+                  topic,
+                  eventType: decodedEvent.eventType,
+                  result: "success",
+                  durationSeconds: elapsedSeconds(startedAt)
+                });
+              } catch (error) {
+                markActiveSpanAsFailed(error);
+                const eventType =
+                  event?.eventType ??
+                  readHeader(
+                    message.headers,
+                    KAFKA_HEADER_NAMES.eventType
+                  ) ??
+                  "UNKNOWN_EVENT";
+
+                this.metrics?.recordKafkaFailed(
+                  topic,
+                  eventType,
+                  getErrorCode(error)
+                );
+                this.metrics?.observeKafkaProcessing({
+                  topic,
+                  eventType,
+                  result: "failure",
+                  durationSeconds: elapsedSeconds(startedAt)
+                });
+                this.logger.logFailed({
+                  topic,
+                  partition,
+                  offset: message.offset,
+                  eventType:
+                    event?.eventType ??
+                    readHeader(
+                      message.headers,
+                      KAFKA_HEADER_NAMES.eventType
+                    ),
+                  eventId:
+                    event?.eventId ??
+                    readHeader(
+                      message.headers,
+                      KAFKA_HEADER_NAMES.eventId
+                    ),
+                  error
+                });
+
+                if (!event) {
+                  throw error;
+                }
+
+                if (!this.retryPolicy.supports(topic, message.headers)) {
+                  throw error;
+                }
+
+                const traceFields = getActiveTraceLogFields();
+                const consumerContext: KafkaConsumerMessageContext = {
+                  topic,
+                  partition,
+                  offset: message.offset,
+                  key: message.key?.toString("utf8") ?? null,
+                  headers: message.headers ?? {},
+                  event,
+                  correlationId:
+                    readHeader(
+                      message.headers,
+                      KAFKA_HEADER_NAMES.correlationId
+                    ) ?? event.correlationId,
+                  ...traceFields
+                };
+
+                await this.retryDispatcher.dispatch({
+                  context: consumerContext,
+                  error
+                });
+              }
             }
-
-            const decodedEvent =
-              await this.codec.deserialize<DomainEvent>(message.value);
-            event = decodedEvent;
-
-            const context: KafkaConsumerMessageContext = {
-              topic,
-              partition,
-              offset: message.offset,
-              key: message.key?.toString("utf8") ?? null,
-              headers: message.headers ?? {},
-              event: decodedEvent,
-              correlationId:
-                readHeader(message.headers, KAFKA_HEADER_NAMES.correlationId) ??
-                decodedEvent.correlationId
-            };
-
-            this.logger.logConsumed({
-              topic,
-              partition,
-              offset: message.offset,
-              event: decodedEvent
-            });
-
-            const handler = this.resolveHandler(topic, message.headers);
-
-            if (!handler) {
-              throw new Error(
-                `Kafka handler is not registered for topic ${topic}`
-              );
-            }
-
-            await handler(context);
-
-            this.metrics?.recordKafkaConsumed(
-              topic,
-              decodedEvent.eventType
-            );
-            this.metrics?.observeKafkaProcessing({
-              topic,
-              eventType: decodedEvent.eventType,
-              result: "success",
-              durationSeconds: elapsedSeconds(startedAt)
-            });
-          } catch (error) {
-            const eventType =
-              event?.eventType ??
-              readHeader(
-                message.headers,
-                KAFKA_HEADER_NAMES.eventType
-              ) ??
-              "UNKNOWN_EVENT";
-
-            this.metrics?.recordKafkaFailed(
-              topic,
-              eventType,
-              getErrorCode(error)
-            );
-            this.metrics?.observeKafkaProcessing({
-              topic,
-              eventType,
-              result: "failure",
-              durationSeconds: elapsedSeconds(startedAt)
-            });
-            this.logger.logFailed({
-              topic,
-              partition,
-              offset: message.offset,
-              eventType:
-                event?.eventType ?? readHeader(message.headers, KAFKA_HEADER_NAMES.eventType),
-              eventId: event?.eventId ?? readHeader(message.headers, KAFKA_HEADER_NAMES.eventId),
-              error
-            });
-
-            if (!event) {
-              // Без декодированного события невозможно безопасно выбрать Avro
-              // subject для retry. Ошибка пробрасывается KafkaJS и offset не
-              // фиксируется, чтобы сообщение не было молча потеряно.
-              throw error;
-            }
-
-            if (!this.retryPolicy.supports(topic, message.headers)) {
-              throw error;
-            }
-
-            const context: KafkaConsumerMessageContext = {
-              topic,
-              partition,
-              offset: message.offset,
-              key: message.key?.toString("utf8") ?? null,
-              headers: message.headers ?? {},
-              event,
-              correlationId:
-                readHeader(
-                  message.headers,
-                  KAFKA_HEADER_NAMES.correlationId
-                ) ?? event.correlationId
-            };
-
-            await this.retryDispatcher.dispatch({
-              context,
-              error
-            });
-          }
+          );
         }
       });
     } catch (error) {

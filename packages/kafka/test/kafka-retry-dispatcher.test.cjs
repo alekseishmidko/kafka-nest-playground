@@ -32,7 +32,13 @@ function createContext(overrides = {}) {
     partition: 2,
     offset: "42",
     key: "order-1",
-    headers: {},
+    headers: {
+      [KAFKA_HEADER_NAMES.traceParent]:
+        "00-11111111111111111111111111111111-2222222222222222-01",
+      [KAFKA_HEADER_NAMES.traceId]:
+        "11111111111111111111111111111111",
+      [KAFKA_HEADER_NAMES.spanId]: "2222222222222222"
+    },
     event: createOrderCreatedEvent(),
     correlationId: "correlation-1",
     ...overrides
@@ -90,6 +96,10 @@ describe("KafkaRetryDispatcher", () => {
       published[0].headers[KAFKA_HEADER_NAMES.errorCode],
       "ERROR"
     );
+    assert.equal(
+      published[0].headers[KAFKA_HEADER_NAMES.traceId],
+      context.headers[KAFKA_HEADER_NAMES.traceId]
+    );
   });
 
   it("после retry-5m публикует DeadLetterEvent с контекстом ошибки", async () => {
@@ -98,6 +108,11 @@ describe("KafkaRetryDispatcher", () => {
     const context = createContext({
       topic: KAFKA_TOPICS.orderOrderEventsRetry5m,
       headers: {
+        [KAFKA_HEADER_NAMES.traceParent]:
+          "00-11111111111111111111111111111111-2222222222222222-01",
+        [KAFKA_HEADER_NAMES.traceId]:
+          "11111111111111111111111111111111",
+        [KAFKA_HEADER_NAMES.spanId]: "2222222222222222",
         [KAFKA_HEADER_NAMES.retryCount]: "3",
         [KAFKA_HEADER_NAMES.originalTopic]:
           KAFKA_TOPICS.orderOrderEvents,
@@ -136,6 +151,10 @@ describe("KafkaRetryDispatcher", () => {
     assert.equal(
       published[0].headers[KAFKA_HEADER_NAMES.errorCode],
       "RANGE_ERROR"
+    );
+    assert.equal(
+      published[0].headers[KAFKA_HEADER_NAMES.traceId],
+      context.headers[KAFKA_HEADER_NAMES.traceId]
     );
   });
 });

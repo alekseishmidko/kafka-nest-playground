@@ -5,10 +5,13 @@ import {
   e2eConfig,
   encodeEvent,
   json,
+  waitForKafkaEvent,
   waitFor
 } from "./lib/e2e-toolkit.mjs";
 
 const RISK_TOPIC = "risk.risk-events";
+const RETRY_TOPIC = "order.order-events.retry-5s";
+const DLQ_TOPIC = "dead-letter.events";
 const RISK_APPROVED_SUBJECT =
   "risk.risk-events-OrderRiskApproved-value";
 const OPERATOR_API_KEY =
@@ -27,11 +30,50 @@ async function main() {
   );
   const orderId = randomUUID();
   const originalEvent = createInvalidRiskEvent();
+  const traceId = randomUUID().replaceAll("-", "");
+  const parentSpanId = randomUUID().replaceAll("-", "").slice(0, 16);
+  let dlqHeaders;
+  let reprocessedHeaders;
+  let dlqWatcher;
+  let reprocessedWatcher;
 
   try {
     await assertAdminApiIsReachable();
     await insertPendingOrder(postgres, orderId);
-    await publishRiskEvent(producer, originalEvent);
+    dlqWatcher = await waitForKafkaEvent({
+      topic: DLQ_TOPIC,
+      groupId: `e2e-dlq-trace-${Date.now()}`,
+      predicate: (event, message) => {
+        if (event.causationId !== originalEvent.eventId) {
+          return false;
+        }
+
+        dlqHeaders = normalizeKafkaHeaders(message.headers);
+        return true;
+      }
+    });
+
+    await publishRiskRetryEvent(
+      producer,
+      originalEvent,
+      traceId,
+      parentSpanId
+    );
+    await dlqWatcher.eventPromise;
+    await dlqWatcher.close();
+    dlqWatcher = null;
+
+    assertEqual(
+      dlqHeaders["x-trace-id"],
+      traceId,
+      "DLQ traceId"
+    );
+    assertTraceParent(dlqHeaders.traceparent, traceId, "DLQ");
+    assertNotEqual(
+      dlqHeaders["x-span-id"],
+      parentSpanId,
+      "DLQ producer spanId"
+    );
 
     const dlq = await waitFor(
       () => readDlqByOriginalEventId(postgres, originalEvent.eventId),
@@ -46,11 +88,31 @@ async function main() {
       "DLQ original topic"
     );
 
+    reprocessedWatcher = await waitForKafkaEvent({
+      topic: RISK_TOPIC,
+      groupId: `e2e-reprocessed-trace-${Date.now()}`,
+      predicate: (event, message) => {
+        if (
+          event.producer !== "order-service-dlq-reprocessor" ||
+          event.payload.orderId !== orderId
+        ) {
+          return false;
+        }
+
+        reprocessedHeaders = normalizeKafkaHeaders(message.headers);
+        return true;
+      }
+    });
     const reprocessed = await reprocessDlqEvent(
       dlq.id,
       dlq.version,
-      { orderId }
+      { orderId },
+      traceId,
+      parentSpanId
     );
+    await reprocessedWatcher.eventPromise;
+    await reprocessedWatcher.close();
+    reprocessedWatcher = null;
 
     assertEqual(
       reprocessed.status,
@@ -96,6 +158,26 @@ async function main() {
       },
       `reprocessed outbox ${reprocessed.reprocessedEventId} to become PUBLISHED`
     );
+    assertEqual(
+      outbox.trace_context["x-trace-id"],
+      traceId,
+      "outbox traceId"
+    );
+    assertEqual(
+      reprocessedHeaders["x-trace-id"],
+      traceId,
+      "reprocessed Kafka traceId"
+    );
+    assertNotEqual(
+      reprocessedHeaders["x-span-id"],
+      parentSpanId,
+      "reprocessed Kafka producer spanId"
+    );
+    assertTraceParent(
+      reprocessedHeaders.traceparent,
+      traceId,
+      "reprocessed Kafka event"
+    );
     const order = await waitFor(
       async () => {
         const row = await readOrder(postgres, orderId);
@@ -112,12 +194,17 @@ async function main() {
         originalEventId: originalEvent.eventId,
         reprocessedEventId: reprocessed.reprocessedEventId,
         auditAction: auditLog.action,
+        traceId,
         outboxStatus: outbox.status,
         orderId,
         orderStatus: order.status
       })
     );
   } finally {
+    await Promise.allSettled([
+      dlqWatcher?.close(),
+      reprocessedWatcher?.close()
+    ]);
     await producer.disconnect();
     await postgres.end();
   }
@@ -168,15 +255,35 @@ async function insertPendingOrder(postgres, orderId) {
   );
 }
 
-async function publishRiskEvent(producer, event) {
+/**
+ * Публикует событие сразу в первый retry topic с заранее известным trace.
+ *
+ * Такой вход сокращает E2E до одной реальной retry-задержки и одновременно
+ * проверяет восстановление `x-original-topic`.
+ */
+async function publishRiskRetryEvent(
+  producer,
+  event,
+  traceId,
+  spanId
+) {
   const value = await encodeEvent(RISK_APPROVED_SUBJECT, event);
 
   await producer.send({
-    topic: RISK_TOPIC,
+    topic: RETRY_TOPIC,
     messages: [
       {
         key: event.payload.orderId,
-        value
+        value,
+        headers: {
+          traceparent: `00-${traceId}-${spanId}-01`,
+          "x-trace-id": traceId,
+          "x-span-id": spanId,
+          "x-original-topic": RISK_TOPIC,
+          "x-retry-count": "1",
+          "x-first-failed-at": new Date().toISOString(),
+          "x-error-code": "E2E_RETRY_ERROR"
+        }
       }
     ]
   });
@@ -207,14 +314,21 @@ function createInvalidRiskEvent() {
  * Версия защищает запись от параллельного изменения другим оператором,
  * а комментарий сохраняется в неизменяемом журнале аудита.
  */
-async function reprocessDlqEvent(id, version, payload) {
+async function reprocessDlqEvent(
+  id,
+  version,
+  payload,
+  traceId,
+  spanId
+) {
   const response = await fetch(
     new URL(`/admin/dlq/${id}/reprocess`, e2eConfig.orderAdminUrl),
     {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-admin-api-key": OPERATOR_API_KEY
+        "x-admin-api-key": OPERATOR_API_KEY,
+        traceparent: `00-${traceId}-${spanId}-01`
       },
       body: JSON.stringify({
         payload,
@@ -261,7 +375,7 @@ async function readDlqByOriginalEventId(postgres, eventId) {
 async function readOutboxByEventId(postgres, eventId) {
   const result = await postgres.query(
     `
-      select event_id, status
+      select event_id, status, trace_context
       from outbox_events
       where event_id = $1
     `,
@@ -269,6 +383,23 @@ async function readOutboxByEventId(postgres, eventId) {
   );
 
   return result.rows[0] ?? null;
+}
+
+function normalizeKafkaHeaders(headers = {}) {
+  return Object.fromEntries(
+    Object.entries(headers).map(([name, value]) => [
+      name,
+      Buffer.isBuffer(value) ? value.toString("utf8") : String(value)
+    ])
+  );
+}
+
+function assertTraceParent(value, expectedTraceId, label) {
+  if (!value || value.split("-")[1] !== expectedTraceId) {
+    throw new Error(
+      `${label} traceparent does not contain traceId ${expectedTraceId}: ${json(value)}`
+    );
+  }
 }
 
 /**

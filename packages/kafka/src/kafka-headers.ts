@@ -1,4 +1,5 @@
 import type { DomainEvent } from "@kafka-playground/contracts";
+import { TRACE_HEADER_NAMES } from "@kafka-playground/observability";
 import type { KafkaHeaderInput, KafkaHeaders } from "./types";
 
 /**
@@ -16,7 +17,11 @@ export const KAFKA_HEADER_NAMES = {
   retryCount: "x-retry-count",
   originalTopic: "x-original-topic",
   firstFailedAt: "x-first-failed-at",
-  errorCode: "x-error-code"
+  errorCode: "x-error-code",
+  traceParent: TRACE_HEADER_NAMES.traceParent,
+  traceState: TRACE_HEADER_NAMES.traceState,
+  traceId: TRACE_HEADER_NAMES.traceId,
+  spanId: TRACE_HEADER_NAMES.spanId
 } as const;
 
 /**

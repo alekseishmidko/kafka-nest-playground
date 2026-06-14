@@ -117,6 +117,17 @@ E2E_POLL_INTERVAL_MS=500
  -> заказ RISK_APPROVED
 ```
 
+Одновременно проверяется сохранение distributed trace:
+
+```text
+known traceparent
+ -> retry-5s headers
+ -> dead-letter.events headers
+ -> HTTP reprocess traceparent
+ -> outbox_events.trace_context
+ -> reprocessed Kafka headers
+```
+
 Запуск:
 
 ```bash

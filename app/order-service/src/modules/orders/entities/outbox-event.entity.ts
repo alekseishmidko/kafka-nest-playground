@@ -6,6 +6,7 @@ import {
   UpdateDateColumn
 } from "typeorm";
 import type { DomainEvent, KafkaTopicName } from "@kafka-playground/contracts";
+import type { TraceCarrier } from "@kafka-playground/observability";
 
 /**
  * Состояние записи в outbox-таблице.
@@ -55,6 +56,15 @@ export class OutboxEventEntity {
   /** Полный event envelope, который будет сериализован через Schema Registry codec. */
   @Column({ type: "jsonb" })
   event!: DomainEvent;
+
+  /**
+   * W3C context исходной операции.
+   *
+   * Поле хранится отдельно от domain event: tracing является технической
+   * метаинформацией транспорта и не должен менять бизнес-контракт события.
+   */
+  @Column({ name: "trace_context", type: "jsonb", nullable: true })
+  traceContext!: TraceCarrier | null;
 
   @Column({
     type: "enum",

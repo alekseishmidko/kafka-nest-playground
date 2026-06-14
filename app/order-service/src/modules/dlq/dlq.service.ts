@@ -11,7 +11,12 @@ import {
   readHeader,
   type KafkaConsumerMessageContext
 } from "@kafka-playground/kafka";
-import { PinoLogger } from "@kafka-playground/observability";
+import {
+  captureActiveTraceContext,
+  PinoLogger,
+  runInTraceSpan,
+  SpanKind
+} from "@kafka-playground/observability";
 import {
   OutboxEventEntity,
   OutboxEventStatus
@@ -139,7 +144,17 @@ export class DlqService {
     }
   ): Promise<DeadLetterEventEntity> {
     const comment = requireComment(params.comment);
-    const result = await this.dataSource.transaction(async (manager) => {
+    const result = await runInTraceSpan(
+      "dlq reprocess",
+      {
+        kind: SpanKind.INTERNAL,
+        attributes: {
+          "dlq.event.id": id,
+          "dlq.operator.id": params.operatorId,
+          "dlq.operation": "reprocess"
+        }
+      },
+      () => this.dataSource.transaction(async (manager) => {
       const entity = await manager.findOne(DeadLetterEventEntity, {
         where: { id },
         lock: { mode: "pessimistic_write" }
@@ -171,6 +186,7 @@ export class DlqService {
           eventType: reprocessed.event.eventType,
           eventId: reprocessed.event.eventId,
           event: reprocessed.event,
+          traceContext: captureActiveTraceContext(),
           status: OutboxEventStatus.Pending
         })
       );
@@ -198,7 +214,8 @@ export class DlqService {
         entity: savedEntity,
         reprocessedEvent: reprocessed.event
       };
-    });
+      })
+    );
 
     // Это только fast path. Если Kafka недоступна, outbox publisher сохранит
     // FAILED и повторит отправку по своему backoff.
@@ -233,7 +250,17 @@ export class DlqService {
   ): Promise<DeadLetterEventEntity> {
     const normalizedReason = requireComment(reason);
 
-    return this.dataSource.transaction(async (manager) => {
+    return runInTraceSpan(
+      "dlq ignore",
+      {
+        kind: SpanKind.INTERNAL,
+        attributes: {
+          "dlq.event.id": id,
+          "dlq.operator.id": params.operatorId,
+          "dlq.operation": "ignore"
+        }
+      },
+      () => this.dataSource.transaction(async (manager) => {
       const entity = await manager.findOne(DeadLetterEventEntity, {
         where: { id },
         lock: { mode: "pessimistic_write" }
@@ -276,7 +303,8 @@ export class DlqService {
       );
 
       return saved;
-    });
+      })
+    );
   }
 }
 
