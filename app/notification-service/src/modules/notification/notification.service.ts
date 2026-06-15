@@ -7,6 +7,7 @@ import type {
 } from "@kafka-playground/contracts";
 import { PinoLogger } from "@kafka-playground/observability";
 import { NotificationDeliveryService } from "./notification-delivery.service";
+import type { NotificationDeliveryRequest } from "./notification-delivery.service";
 
 @Injectable()
 export class NotificationService {
@@ -23,15 +24,25 @@ export class NotificationService {
   }
 
   async handleNotificationCommand(event: NotificationCommandEvent): Promise<void> {
-    await this.delivery.deliver({
+    await this.deliver(this.createNotificationCommandRequest(event));
+  }
+
+  /**
+   * Формирует запрос доставки без выполнения внешнего side effect.
+   */
+  createNotificationCommandRequest(
+    event: NotificationCommandEvent
+  ): NotificationDeliveryRequest {
+    return {
       notificationId: event.payload.notificationId,
+      idempotencyKey: event.eventId,
       recipient: event.payload.recipient,
       channel: normalizeChannel(event.payload.channel),
       template: event.payload.template,
       data: parseDataJson(event.payload.dataJson, this.logger, event.eventId),
       correlationId: event.correlationId,
       causationId: event.eventId
-    });
+    };
   }
 
   /**
@@ -39,8 +50,18 @@ export class NotificationService {
    * заказ в терминальном состоянии `CONFIRMED`.
    */
   async handleOrderConfirmed(event: OrderConfirmedEvent): Promise<void> {
-    await this.delivery.deliver({
+    await this.deliver(this.createOrderConfirmedRequest(event));
+  }
+
+  /**
+   * Создаёт стабильную команду уведомления о подтверждённом заказе.
+   */
+  createOrderConfirmedRequest(
+    event: OrderConfirmedEvent
+  ): NotificationDeliveryRequest {
+    return {
       notificationId: `order-confirmed-${event.payload.orderId}`,
+      idempotencyKey: event.eventId,
       recipient: this.defaultRecipient,
       channel: "email",
       template: "order.confirmed",
@@ -54,7 +75,7 @@ export class NotificationService {
       },
       correlationId: event.correlationId,
       causationId: event.eventId
-    });
+    };
   }
 
   /**
@@ -62,8 +83,18 @@ export class NotificationService {
    * вызвана risk rejection или отказом платёжного провайдера.
    */
   async handleOrderCancelled(event: OrderCancelledEvent): Promise<void> {
-    await this.delivery.deliver({
+    await this.deliver(this.createOrderCancelledRequest(event));
+  }
+
+  /**
+   * Создаёт стабильную команду уведомления об отменённом заказе.
+   */
+  createOrderCancelledRequest(
+    event: OrderCancelledEvent
+  ): NotificationDeliveryRequest {
+    return {
       notificationId: `order-cancelled-${event.payload.orderId}`,
+      idempotencyKey: event.eventId,
       recipient: this.defaultRecipient,
       channel: "email",
       template: "order.cancelled",
@@ -75,7 +106,14 @@ export class NotificationService {
       },
       correlationId: event.correlationId,
       causationId: event.eventId
-    });
+    };
+  }
+
+  /**
+   * Передаёт подготовленную команду delivery-adapter-у.
+   */
+  async deliver(request: NotificationDeliveryRequest): Promise<void> {
+    await this.delivery.deliver(request);
   }
 }
 

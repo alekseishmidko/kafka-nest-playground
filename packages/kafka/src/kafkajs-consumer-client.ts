@@ -36,6 +36,12 @@ export class KafkaJsConsumerClient implements KafkaConsumerClient {
     await this.connect();
 
     await this.consumer.run({
+      // Частый commit уменьшает объём повторной доставки после аварийного
+      // завершения. Durable inbox всё равно остаётся обязательной защитой:
+      // commit offset и бизнес-side effect не являются одной транзакцией.
+      autoCommit: true,
+      autoCommitInterval: 1_000,
+      autoCommitThreshold: 1,
       eachMessage: async ({ topic, partition, message, heartbeat }) => {
         await options.eachMessage({
           topic: topic as KafkaEachMessagePayload["topic"],
@@ -50,6 +56,14 @@ export class KafkaJsConsumerClient implements KafkaConsumerClient {
         });
       }
     });
+  }
+
+  /**
+   * Инициирует штатный выход из consumer group.
+   */
+  async disconnect(): Promise<void> {
+    await this.consumer.disconnect();
+    this.connectPromise = null;
   }
 
   private async connect(): Promise<void> {

@@ -6,7 +6,10 @@ import {
   type PaymentAuthorizedEvent,
   type PaymentFailedEvent
 } from "@kafka-playground/contracts";
-import { KafkaProducerService } from "@kafka-playground/kafka";
+import {
+  createDeterministicEventId,
+  KafkaProducerService
+} from "@kafka-playground/kafka";
 import { randomUUID } from "node:crypto";
 import { PinoLogger } from "@kafka-playground/observability";
 import { PaymentAuthorizer, type PaymentAuthorizationDecision } from "./payment.authorizer";
@@ -25,7 +28,15 @@ export class PaymentService {
     this.logger.setContext(PaymentService.name);
   }
 
-  async handleOrderRiskApproved(event: OrderRiskApprovedEvent): Promise<void> {
+  /**
+   * Выполняет авторизацию и формирует детерминированное payment-событие.
+   *
+   * Метод не публикует Kafka-сообщение. Подготовленный результат сначала
+   * сохраняется в inbox, чтобы повтор после падения не создал новый платёж.
+   */
+  preparePaymentEvent(
+    event: OrderRiskApprovedEvent
+  ): PaymentAuthorizedEvent | PaymentFailedEvent {
     this.logger.info(
       {
         orderId: event.payload.orderId,
@@ -47,21 +58,30 @@ export class PaymentService {
         };
     const paymentEvent = this.createPaymentEvent(event, decision);
 
+    return paymentEvent;
+  }
+
+  /**
+   * Публикует сохранённый результат авторизации.
+   */
+  async publishPaymentEvent(
+    paymentEvent: PaymentAuthorizedEvent | PaymentFailedEvent
+  ): Promise<void> {
     await this.kafkaProducer.publish({
       topic: EVENT_TOPIC_MAP[paymentEvent.eventType],
-      key: event.payload.orderId,
+      key: paymentEvent.payload.orderId,
       event: paymentEvent,
-      correlationId: event.correlationId,
-      causationId: event.eventId
+      correlationId: paymentEvent.correlationId,
+      causationId: paymentEvent.causationId ?? undefined
     });
 
     this.logger.info(
       {
-        orderId: event.payload.orderId,
+        orderId: paymentEvent.payload.orderId,
         paymentId: paymentEvent.payload.paymentId,
         eventId: paymentEvent.eventId,
         eventType: paymentEvent.eventType,
-        authorized: decision.authorized,
+        authorized: paymentEvent.eventType === "PaymentAuthorized",
         topic: EVENT_TOPIC_MAP[paymentEvent.eventType],
         correlationId: paymentEvent.correlationId
       },
@@ -74,7 +94,10 @@ export class PaymentService {
     decision: PaymentAuthorizationDecision
   ): PaymentAuthorizedEvent | PaymentFailedEvent {
     const base = {
-      eventId: randomUUID(),
+      eventId: createDeterministicEventId(
+        "payment-service:payment-result",
+        source.eventId
+      ),
       eventVersion: 1,
       occurredAt: new Date().toISOString(),
       correlationId: source.correlationId,

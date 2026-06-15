@@ -3,9 +3,13 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { getServiceEnvFilePaths, loadServiceEnvFiles } from "@kafka-playground/config";
 import {
   KafkaJsConsumerClient,
-  KafkaModule
+  KafkaModule,
+  PostgresKafkaInboxStore
 } from "@kafka-playground/kafka";
-import { createServiceLoggerModule } from "@kafka-playground/observability";
+import {
+  createServiceLoggerModule,
+  MetricsModule
+} from "@kafka-playground/observability";
 import { join } from "node:path";
 import { NotificationModule } from "./modules/notification/notification.module";
 
@@ -16,6 +20,9 @@ loadServiceEnvFiles(join(process.cwd()));
     createServiceLoggerModule({
       serviceName: "notification-service",
       environment: process.env.APP_ENV ?? "local"
+    }),
+    MetricsModule.register({
+      serviceName: "notification-service"
     }),
     ConfigModule.forRoot({
       isGlobal: true,
@@ -38,6 +45,17 @@ loadServiceEnvFiles(join(process.cwd()));
             clientId,
             brokers,
             groupId
+          }),
+          inboxStore: new PostgresKafkaInboxStore({
+            host: configService.getOrThrow<string>("POSTGRES_HOST"),
+            port: Number(configService.getOrThrow<string>("POSTGRES_PORT")),
+            user: configService.getOrThrow<string>("POSTGRES_USER"),
+            password: configService.getOrThrow<string>("POSTGRES_PASSWORD"),
+            database: configService.getOrThrow<string>("POSTGRES_DB"),
+            ssl:
+              configService.get<string>("POSTGRES_SSL", "false") === "true"
+                ? { rejectUnauthorized: false }
+                : false
           })
         };
       }

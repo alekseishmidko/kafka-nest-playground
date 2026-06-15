@@ -2,7 +2,8 @@ import {
   Inject,
   Injectable,
   Optional,
-  type OnApplicationBootstrap
+  type OnApplicationBootstrap,
+  type OnApplicationShutdown
 } from "@nestjs/common";
 import {
   KAFKA_TOPICS,
@@ -45,10 +46,13 @@ interface KafkaConsumerRegistration {
  * модулей. Это позволяет добавлять независимые consumers без гонок запуска.
  */
 @Injectable()
-export class KafkaConsumerRunner implements OnApplicationBootstrap {
+export class KafkaConsumerRunner
+  implements OnApplicationBootstrap, OnApplicationShutdown
+{
   private readonly retryInMs = 5000;
   private readonly registrations: KafkaConsumerRegistration[] = [];
   private started = false;
+  private stopping = false;
 
   constructor(
     @Inject(KAFKA_CONSUMER_CLIENT)
@@ -72,6 +76,15 @@ export class KafkaConsumerRunner implements OnApplicationBootstrap {
 
     this.started = true;
     void this.startWithRetry();
+  }
+
+  /**
+   * Штатно закрывает Kafka consumer, чтобы broker быстрее завершил rebalance,
+   * а KafkaJS зафиксировал уже обработанные offsets.
+   */
+  async onApplicationShutdown(): Promise<void> {
+    this.stopping = true;
+    await this.consumer.disconnect?.();
   }
 
   /**
@@ -342,6 +355,10 @@ export class KafkaConsumerRunner implements OnApplicationBootstrap {
         }
       });
     } catch (error) {
+      if (this.stopping) {
+        return;
+      }
+
       this.logger.logConsumerStartFailed({
         topics: sourceTopics,
         retryInMs: this.retryInMs,

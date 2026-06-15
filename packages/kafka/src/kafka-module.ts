@@ -6,7 +6,12 @@ import { KafkaRetryDispatcher } from "./kafka-retry-dispatcher";
 import { KafkaRetryPolicy } from "./kafka-retry-policy";
 import { KafkaLagMonitor } from "./kafka-lag-monitor";
 import {
+  KafkaIdempotentEventProcessor,
+  type KafkaInboxStore
+} from "./kafka-consumer-inbox";
+import {
   KAFKA_CONSUMER_CLIENT,
+  KAFKA_INBOX_STORE,
   KAFKA_MODULE_OPTIONS,
   KAFKA_PRODUCER_CLIENT,
   SCHEMA_REGISTRY_CODEC
@@ -17,6 +22,8 @@ import type { KafkaConsumerClient, KafkaModuleOptions, KafkaProducerClient } fro
 export interface KafkaModuleRegisterOptions extends KafkaModuleOptions {
   producerClient?: KafkaProducerClient;
   consumerClient?: KafkaConsumerClient;
+  /** Durable inbox обязателен только сервисам, использующим idempotent processor. */
+  inboxStore?: KafkaInboxStore;
 }
 
 export interface KafkaModuleAsyncOptions {
@@ -45,6 +52,10 @@ export class KafkaModule {
         useValue: options.consumerClient ?? createMissingConsumerClient()
       },
       {
+        provide: KAFKA_INBOX_STORE,
+        useValue: options.inboxStore ?? createMissingInboxStore()
+      },
+      {
         provide: SCHEMA_REGISTRY_CODEC,
         useClass: SchemaRegistryAvroCodec
       },
@@ -53,7 +64,8 @@ export class KafkaModule {
       KafkaRetryPolicy,
       KafkaRetryDispatcher,
       KafkaConsumerRunner,
-      KafkaLagMonitor
+      KafkaLagMonitor,
+      KafkaIdempotentEventProcessor
     ];
 
     return {
@@ -63,12 +75,14 @@ export class KafkaModule {
         KAFKA_MODULE_OPTIONS,
         KAFKA_PRODUCER_CLIENT,
         KAFKA_CONSUMER_CLIENT,
+        KAFKA_INBOX_STORE,
         SCHEMA_REGISTRY_CODEC,
         KafkaProducerService,
         KafkaRetryPolicy,
         KafkaRetryDispatcher,
         KafkaConsumerRunner,
-        KafkaLagMonitor
+        KafkaLagMonitor,
+        KafkaIdempotentEventProcessor
       ]
     };
   }
@@ -93,6 +107,12 @@ export class KafkaModule {
           moduleOptions.consumerClient ?? createMissingConsumerClient()
       },
       {
+        provide: KAFKA_INBOX_STORE,
+        inject: [KAFKA_MODULE_OPTIONS],
+        useFactory: (moduleOptions: KafkaModuleRegisterOptions) =>
+          moduleOptions.inboxStore ?? createMissingInboxStore()
+      },
+      {
         provide: SCHEMA_REGISTRY_CODEC,
         useClass: SchemaRegistryAvroCodec
       },
@@ -101,7 +121,8 @@ export class KafkaModule {
       KafkaRetryPolicy,
       KafkaRetryDispatcher,
       KafkaConsumerRunner,
-      KafkaLagMonitor
+      KafkaLagMonitor,
+      KafkaIdempotentEventProcessor
     ];
 
     return {
@@ -112,15 +133,30 @@ export class KafkaModule {
         KAFKA_MODULE_OPTIONS,
         KAFKA_PRODUCER_CLIENT,
         KAFKA_CONSUMER_CLIENT,
+        KAFKA_INBOX_STORE,
         SCHEMA_REGISTRY_CODEC,
         KafkaProducerService,
         KafkaRetryPolicy,
         KafkaRetryDispatcher,
         KafkaConsumerRunner,
-        KafkaLagMonitor
+        KafkaLagMonitor,
+        KafkaIdempotentEventProcessor
       ]
     };
   }
+}
+
+function createMissingInboxStore(): KafkaInboxStore {
+  const missing = async (): Promise<never> => {
+    throw new Error("Kafka inbox store is not configured");
+  };
+
+  return {
+    claim: missing,
+    savePrepared: missing,
+    markCompleted: missing,
+    release: missing
+  };
 }
 
 function createMissingProducerClient(): KafkaProducerClient {

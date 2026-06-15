@@ -11,6 +11,16 @@ NestJS-сервис для CPU-heavy scoring риска заказа.
 - Публиковать `OrderRiskApproved` или `OrderRiskRejected` в `risk.risk-events`.
 - Сохранять `correlationId` и выставлять `causationId` равным исходному `OrderCreated.eventId`.
 - Использовать общую Kafka/Avro-инфраструктуру из `@kafka-playground/kafka`.
+- Фиксировать обработку в durable `kafka_consumer_inbox`.
+- Повторно использовать сохранённое решение и тот же исходящий `eventId`.
+
+## Идемпотентность
+
+До публикации risk-событие сохраняется в inbox со статусом `PREPARED`.
+Повторная доставка завершённого `OrderCreated` пропускается. После аварии
+между Kafka publish и фиксацией `COMPLETED` сервис повторно публикует тот же
+результат с тем же `eventId`, поэтому downstream не выполняет бизнес-логику
+второй раз.
 
 ## Поток Событий
 

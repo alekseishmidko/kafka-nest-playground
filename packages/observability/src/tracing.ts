@@ -67,11 +67,31 @@ export function initializeTracing(options: {
         // создала бы дублирующие producer/consumer spans.
         "@opentelemetry/instrumentation-kafkajs": {
           enabled: false
+        },
+        "@opentelemetry/instrumentation-http": {
+          ignoreIncomingRequestHook: (request) =>
+            isTechnicalEndpoint(request.url)
         }
       })
     ]
   });
   tracingSdk.start();
+}
+
+/**
+ * Определяет технические HTTP endpoints, которые не описывают пользовательский
+ * бизнес-сценарий и не должны создавать traces или access-логи.
+ */
+export function isTechnicalEndpoint(
+  url: string | undefined
+): boolean {
+  const pathname = (url ?? "").split("?", 1)[0];
+
+  return (
+    pathname === "/metrics" ||
+    pathname === "/health" ||
+    pathname.startsWith("/health/")
+  );
 }
 
 /**

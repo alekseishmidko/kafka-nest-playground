@@ -40,6 +40,8 @@ export interface KafkaConsumerClient {
   run(options: {
     eachMessage(message: KafkaEachMessagePayload): Promise<void>;
   }): Promise<void>;
+  /** Корректно покидает consumer group и фиксирует обработанные offsets. */
+  disconnect?(): Promise<void>;
 }
 
 export interface KafkaEachMessagePayload {

@@ -13,6 +13,13 @@ NestJS service for deterministic mock payment authorization in the order pipelin
 
 Kafka key is `orderId`, so events for one order stay ordered inside a partition.
 
+## Idempotency
+
+Authorization result is persisted in `kafka_consumer_inbox` before Kafka
+publication. Replayed input does not call the payment authorizer again.
+Crash recovery republishes the prepared result with the same deterministic
+`eventId`, allowing downstream consumers to reject the duplicate.
+
 ## Event Flow
 
 1. `risk-service` publishes `OrderRiskApproved`.
