@@ -5,8 +5,10 @@ import {
   type OrderRiskApprovedEvent,
   type OrderRiskRejectedEvent
 } from "@kafka-playground/contracts";
-import { KafkaProducerService } from "@kafka-playground/kafka";
-import { randomUUID } from "node:crypto";
+import {
+  createDeterministicEventId,
+  KafkaProducerService
+} from "@kafka-playground/kafka";
 import { PinoLogger } from "@kafka-playground/observability";
 import { RiskScorer } from "./risk.scorer";
 
@@ -20,7 +22,15 @@ export class RiskService {
     this.logger.setContext(RiskService.name);
   }
 
-  async handleOrderCreated(event: OrderCreatedEvent): Promise<void> {
+  /**
+   * Вычисляет и возвращает результат risk-проверки без внешних side effects.
+   *
+   * Результат сохраняется durable inbox до публикации. Поэтому повторная
+   * обработка после сбоя использует прежний score и прежний `eventId`.
+   */
+  prepareRiskEvent(
+    event: OrderCreatedEvent
+  ): OrderRiskApprovedEvent | OrderRiskRejectedEvent {
     // Логируем бизнес-ключи до scoring: по ним удобно искать всю цепочку обработки заказа.
     this.logger.info(
       {
@@ -38,23 +48,35 @@ export class RiskService {
     // Из одного входного события создаем строго одно исходящее risk-событие.
     const riskEvent = this.createRiskEvent(event, decision);
 
+    return riskEvent;
+  }
+
+  /**
+   * Публикует заранее подготовленное risk-событие.
+   *
+   * При crash recovery метод может быть вызван повторно с тем же `eventId`.
+   * Downstream inbox обязан считать такую публикацию дублем.
+   */
+  async publishRiskEvent(
+    riskEvent: OrderRiskApprovedEvent | OrderRiskRejectedEvent
+  ): Promise<void> {
     await this.kafkaProducer.publish({
       topic: EVENT_TOPIC_MAP[riskEvent.eventType],
       // Key = orderId. Это сохраняет порядок событий одного заказа внутри Kafka partition.
-      key: event.payload.orderId,
+      key: riskEvent.payload.orderId,
       event: riskEvent,
       // correlationId связывает всю бизнес-цепочку, causationId указывает на событие-причину.
-      correlationId: event.correlationId,
-      causationId: event.eventId
+      correlationId: riskEvent.correlationId,
+      causationId: riskEvent.causationId ?? undefined
     });
 
     this.logger.info(
       {
-        orderId: event.payload.orderId,
+        orderId: riskEvent.payload.orderId,
         eventId: riskEvent.eventId,
         eventType: riskEvent.eventType,
-        riskScore: decision.score,
-        approved: decision.approved,
+        riskScore: riskEvent.payload.riskScore,
+        approved: riskEvent.eventType === "OrderRiskApproved",
         topic: EVENT_TOPIC_MAP[riskEvent.eventType],
         correlationId: riskEvent.correlationId
       },
@@ -68,7 +90,10 @@ export class RiskService {
   ): OrderRiskApprovedEvent | OrderRiskRejectedEvent {
     // Общая metadata часть event envelope совпадает с контрактами в packages/contracts.
     const base = {
-      eventId: randomUUID(),
+      eventId: createDeterministicEventId(
+        "risk-service:risk-result",
+        source.eventId
+      ),
       eventVersion: 1,
       occurredAt: new Date().toISOString(),
       correlationId: source.correlationId,

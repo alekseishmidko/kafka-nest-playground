@@ -10,6 +10,7 @@ test("экспортирует прикладные метрики в Prometheus
 
   metrics.recordKafkaConsumed("orders", "OrderCreated");
   metrics.recordKafkaFailed("orders", "OrderCreated", "TYPE_ERROR");
+  metrics.recordKafkaDuplicate("orders", "OrderCreated");
   metrics.recordKafkaRetry({
     originalTopic: "orders",
     destinationTopic: "orders.retry-5s",
@@ -35,6 +36,7 @@ test("экспортирует прикладные метрики в Prometheus
 
   assert.match(output, /kafka_events_consumed_total\{.*service="test-service".*\} 1/);
   assert.match(output, /kafka_events_failed_total\{.*error_code="TYPE_ERROR".*\} 1/);
+  assert.match(output, /kafka_duplicate_events_total\{.*event_type="OrderCreated".*\} 1/);
   assert.match(output, /outbox_events\{.*status="PENDING".*\} 3/);
   assert.match(output, /outbox_pending_events\{.*service="test-service".*\} 3/);
   assert.match(output, /dlq_new_events\{.*service="test-service".*\} 2/);

@@ -24,6 +24,7 @@ GRAFANA_PORT=3001
 pnpm install
 pnpm infra:up
 pnpm contracts:schemas:register
+pnpm --filter order-service migration:run
 ```
 
 Основной order pipeline запускается в отдельных терминалах:
@@ -50,11 +51,14 @@ pnpm dev:risk-service-go
 | Swagger UI | `http://localhost:3000/docs` | Документация Gateway API |
 | Order service | `localhost:50052` | gRPC |
 | Order DLQ Admin API | `http://localhost:3003/admin/dlq` | Внутреннее управление DLQ |
+| Risk metrics | `http://localhost:3004/metrics` | Kafka и runtime метрики |
+| Payment metrics | `http://localhost:3005/metrics` | Kafka и runtime метрики |
+| Notification metrics | `http://localhost:3006/metrics` | Kafka и runtime метрики |
 | Risk service Go | `http://localhost:3002` | Health/ready endpoints |
 | Kafka | `localhost:9092` | Broker |
 | Kafka UI | `http://localhost:8080` | Просмотр topics и consumer groups |
 | Schema Registry | `http://localhost:8081` | Avro schemas |
-| PostgreSQL | `localhost:5432` | Хранилище заказов |
+| PostgreSQL | `localhost:55432` | Заказы, outbox, DLQ и consumer inbox |
 | Grafana | `http://localhost:3001` | При `GRAFANA_PORT=3001` |
 | Prometheus | `http://localhost:9090` | Метрики |
 | Tempo | `http://localhost:3200` | Хранилище distributed traces |

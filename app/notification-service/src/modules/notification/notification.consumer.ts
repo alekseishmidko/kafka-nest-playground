@@ -5,7 +5,10 @@ import {
   type OrderCancelledEvent,
   type OrderConfirmedEvent
 } from "@kafka-playground/contracts";
-import { KafkaConsumerRunner } from "@kafka-playground/kafka";
+import {
+  KafkaConsumerRunner,
+  KafkaIdempotentEventProcessor
+} from "@kafka-playground/kafka";
 import { PinoLogger } from "@kafka-playground/observability";
 import { NotificationService } from "./notification.service";
 
@@ -26,6 +29,7 @@ type NotificationInputEvent =
 export class NotificationConsumer implements OnModuleInit {
   constructor(
     private readonly consumerRunner: KafkaConsumerRunner,
+    private readonly idempotentProcessor: KafkaIdempotentEventProcessor,
     private readonly notificationService: NotificationService,
     private readonly logger: PinoLogger
   ) {
@@ -40,16 +44,34 @@ export class NotificationConsumer implements OnModuleInit {
           EVENT_TOPIC_MAP.OrderConfirmed
         ]
       },
-      async ({ event }) => {
+      async (context) => {
+        const { event } = context;
         switch (event.eventType) {
           case "NotificationCommand":
-            await this.notificationService.handleNotificationCommand(event);
+            await this.idempotentProcessor.process(
+              context,
+              () =>
+                this.notificationService.createNotificationCommandRequest(
+                  event
+                ),
+              (request) => this.notificationService.deliver(request)
+            );
             return;
           case "OrderConfirmed":
-            await this.notificationService.handleOrderConfirmed(event);
+            await this.idempotentProcessor.process(
+              context,
+              () =>
+                this.notificationService.createOrderConfirmedRequest(event),
+              (request) => this.notificationService.deliver(request)
+            );
             return;
           case "OrderCancelled":
-            await this.notificationService.handleOrderCancelled(event);
+            await this.idempotentProcessor.process(
+              context,
+              () =>
+                this.notificationService.createOrderCancelledRequest(event),
+              (request) => this.notificationService.deliver(request)
+            );
             return;
         }
       }

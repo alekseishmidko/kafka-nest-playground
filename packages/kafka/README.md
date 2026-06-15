@@ -12,6 +12,45 @@ Confluent Schema Registry.
 - retry policy для событий жизненного цикла заказа;
 - публикацию необработанных событий в `dead-letter.events`.
 
+## Durable consumer inbox
+
+`KafkaIdempotentEventProcessor` защищает `risk-service`, `payment-service` и
+`notification-service` от повторного выполнения одного события после
+перезапуска consumer-а или повторной доставки Kafka.
+
+Обработка разделена на две фазы:
+
+1. Consumer атомарно захватывает `(consumer_name, event_id)` с временной lease.
+2. Доменный сервис вычисляет результат без внешнего side effect.
+3. Результат сохраняется в `kafka_consumer_inbox` со статусом `PREPARED`.
+4. Выполняется публикация Kafka-события или вызов notification provider.
+5. Inbox переводится в `COMPLETED`.
+
+Если процесс завершился между шагами 4 и 5, следующая попытка использует
+сохранённый результат. Risk/payment события получают детерминированный
+`eventId`, поэтому downstream consumer распознает повторную публикацию как
+дубль. Notification provider получает `idempotencyKey`, равный входному
+`eventId`.
+
+Это не распределённая транзакция между PostgreSQL и Kafka. Гарантия строится
+на стандартной модели at-least-once:
+
+- входное событие может физически прийти повторно;
+- бизнес-решение не вычисляется повторно;
+- повторный downstream event имеет тот же `eventId`;
+- каждый downstream consumer также обязан иметь inbox;
+- внешний API должен поддерживать idempotency key.
+
+Перед запуском workers необходимо применить миграции:
+
+```bash
+pnpm --filter order-service migration:run
+```
+
+Для восстановления зависшей обработки используется lease 30 секунд. Пока
+lease активна, параллельная попытка завершается retryable-ошибкой и проходит
+через настроенные retry topics.
+
 ## Retry-цепочка
 
 Для входных order-flow topics настроен следующий маршрут:

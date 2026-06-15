@@ -58,6 +58,9 @@ export class ApplicationMetrics {
   private readonly outboxPublish: Counter<
     "service" | "topic" | "result"
   >;
+  private readonly duplicates: Counter<
+    "service" | "topic" | "event_type"
+  >;
 
   constructor(
     @Inject(METRICS_OPTIONS)
@@ -140,6 +143,12 @@ export class ApplicationMetrics {
       labelNames: ["service", "topic", "result"],
       registers: [this.registry]
     });
+    this.duplicates = new Counter({
+      name: "kafka_duplicate_events_total",
+      help: "Количество Kafka-событий, пропущенных durable inbox как дубли.",
+      labelNames: ["service", "topic", "event_type"],
+      registers: [this.registry]
+    });
   }
 
   recordKafkaConsumed(topic: string, eventType: string): void {
@@ -160,6 +169,14 @@ export class ApplicationMetrics {
       topic,
       event_type: eventType,
       error_code: errorCode
+    });
+  }
+
+  recordKafkaDuplicate(topic: string, eventType: string): void {
+    this.duplicates.inc({
+      service: this.options.serviceName,
+      topic,
+      event_type: eventType
     });
   }
 

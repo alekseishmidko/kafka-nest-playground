@@ -3,6 +3,11 @@ import { PinoLogger } from "@kafka-playground/observability";
 
 export interface NotificationDeliveryRequest {
   notificationId: string;
+  /**
+   * Стабильный ключ для API провайдера. Повторный запрос с тем же ключом не
+   * должен создавать вторую отправку.
+   */
+  idempotencyKey: string;
   recipient: string;
   channel: "email" | "push" | "webhook";
   template: string;
@@ -21,6 +26,7 @@ export class NotificationDeliveryService {
     this.logger.info(
       {
         notificationId: request.notificationId,
+        idempotencyKey: request.idempotencyKey,
         recipient: request.recipient,
         channel: request.channel,
         template: request.template,

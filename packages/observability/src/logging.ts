@@ -3,6 +3,7 @@ import { LoggerModule, type Params } from "nestjs-pino";
 import type { Options as PinoHttpOptions } from "pino-http";
 import { randomUUID } from "node:crypto";
 import { getActiveTraceLogFields } from "./tracing";
+import { isTechnicalEndpoint } from "./tracing";
 
 export interface ServiceLoggerOptions {
   serviceName: string;
@@ -24,6 +25,9 @@ export function createServiceLoggerParams(options: ServiceLoggerOptions): Params
   return {
     pinoHttp: {
       level: process.env.LOG_LEVEL ?? (isLocal ? "debug" : "info"),
+      autoLogging: {
+        ignore: (request) => isTechnicalEndpoint(request.url)
+      },
       mixin: () => getActiveTraceLogFields(),
       genReqId: (request) =>
         getHeader(request, LOG_HEADER_NAMES.correlationId) ??

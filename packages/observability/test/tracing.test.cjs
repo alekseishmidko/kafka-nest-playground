@@ -3,7 +3,8 @@ const assert = require("node:assert/strict");
 const { ROOT_CONTEXT, trace } = require("@opentelemetry/api");
 const {
   extractTraceContext,
-  injectTraceContext
+  injectTraceContext,
+  isTechnicalEndpoint
 } = require("../dist/tracing.js");
 
 const TRACE_ID = "11111111111111111111111111111111";
@@ -45,4 +46,11 @@ test("отклоняет повреждённый traceparent", () => {
   });
 
   assert.equal(trace.getSpanContext(restored), undefined);
+});
+
+test("исключает metrics и health endpoints из tracing", () => {
+  assert.equal(isTechnicalEndpoint("/metrics"), true);
+  assert.equal(isTechnicalEndpoint("/metrics?format=prometheus"), true);
+  assert.equal(isTechnicalEndpoint("/health/live"), true);
+  assert.equal(isTechnicalEndpoint("/orders"), false);
 });

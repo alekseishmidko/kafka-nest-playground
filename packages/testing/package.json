@@ -12,7 +12,8 @@
     "test:e2e:outbox-failure": "node scripts/outbox-kafka-failure.e2e.mjs",
     "test:e2e:idempotency": "node scripts/order-consumer-idempotency.e2e.mjs",
     "test:e2e:order-lifecycle": "node scripts/order-lifecycle.e2e.mjs",
-    "test:e2e:dlq-management": "node scripts/dlq-management.e2e.mjs"
+    "test:e2e:dlq-management": "node scripts/dlq-management.e2e.mjs",
+    "test:e2e:consumer-inbox": "node scripts/consumer-inbox-restart.e2e.mjs"
   },
   "dependencies": {
     "@kafkajs/confluent-schema-registry": "^4.1.0",

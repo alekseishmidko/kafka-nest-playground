@@ -1,4 +1,5 @@
 export * from "./kafka-consumer-runner";
+export * from "./kafka-consumer-inbox";
 export * from "./kafka-errors";
 export * from "./kafka-headers";
 export * from "./kafka-logger";
