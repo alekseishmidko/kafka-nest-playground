@@ -1,12 +1,25 @@
 import { Kafka, logLevel, type Consumer, type IHeaders } from "kafkajs";
-import type { KafkaConsumerClient, KafkaEachMessagePayload, KafkaHeaders } from "./types";
+import type {
+  KafkaConsumerClient,
+  KafkaEachMessagePayload,
+  KafkaHeaders
+} from "../types";
 
+/**
+ * Параметры низкоуровневого KafkaJS consumer adapter-а.
+ */
 export interface KafkaJsConsumerClientOptions {
   clientId: string;
   brokers: string[];
   groupId: string;
 }
 
+/**
+ * Адаптирует KafkaJS Consumer к внутреннему `KafkaConsumerClient`.
+ *
+ * Остальной пакет не зависит от KafkaJS payload-типов и получает нормализованные
+ * headers. Это позволяет тестировать runner через лёгкий in-memory fake.
+ */
 export class KafkaJsConsumerClient implements KafkaConsumerClient {
   private readonly consumer: Consumer;
   private connectPromise: Promise<void> | null = null;
@@ -21,6 +34,9 @@ export class KafkaJsConsumerClient implements KafkaConsumerClient {
     });
   }
 
+  /**
+   * Подписывает общий consumer на topic, предварительно установив соединение.
+   */
   async subscribe(options: { topic: string; fromBeginning?: boolean }): Promise<void> {
     await this.connect();
 
@@ -30,6 +46,10 @@ export class KafkaJsConsumerClient implements KafkaConsumerClient {
     });
   }
 
+  /**
+   * Запускает единый message loop и преобразует KafkaJS payload во внутренний
+   * транспортно-независимый формат.
+   */
   async run(options: {
     eachMessage(message: KafkaEachMessagePayload): Promise<void>;
   }): Promise<void> {

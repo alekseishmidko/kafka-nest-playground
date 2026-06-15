@@ -12,6 +12,20 @@ Confluent Schema Registry.
 - retry policy для событий жизненного цикла заказа;
 - публикацию необработанных событий в `dead-letter.events`.
 
+## Структура пакета
+
+```text
+src/
+  adapters/   # KafkaJS clients и другие внешние транспортные адаптеры
+  consumer/   # orchestration подписок и message loop
+  inbox/      # durable inbox: контракты, processor и PostgreSQL adapter
+  retry/      # чистая retry policy и публикация retry/DLQ
+```
+
+Корневой `index.ts` сохраняет единый публичный API пакета. Приложения импортируют
+компоненты через `@kafka-playground/kafka` и не зависят от внутреннего
+расположения файлов.
+
 ## Durable consumer inbox
 
 `KafkaIdempotentEventProcessor` защищает `risk-service`, `payment-service` и

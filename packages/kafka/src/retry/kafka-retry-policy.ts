@@ -3,9 +3,9 @@ import {
   type KafkaTopicName
 } from "@kafka-playground/contracts";
 import { Injectable } from "@nestjs/common";
-import { KafkaNonRetryableError } from "./kafka-errors";
-import { KAFKA_HEADER_NAMES, readHeader } from "./kafka-headers";
-import type { KafkaHeaders } from "./types";
+import { KafkaNonRetryableError } from "../kafka-errors";
+import { KAFKA_HEADER_NAMES, readHeader } from "../kafka-headers";
+import type { KafkaHeaders } from "../types";
 
 /**
  * Описывает один этап повторной обработки сообщения.

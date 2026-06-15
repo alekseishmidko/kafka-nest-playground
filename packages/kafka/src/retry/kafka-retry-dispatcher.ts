@@ -10,9 +10,9 @@ import {
   SpanKind
 } from "@kafka-playground/observability";
 import { randomUUID } from "node:crypto";
-import { KAFKA_MODULE_OPTIONS } from "./kafka.tokens";
-import { KAFKA_HEADER_NAMES } from "./kafka-headers";
-import { KafkaProducerService } from "./kafka-producer.service";
+import { KAFKA_MODULE_OPTIONS } from "../kafka.tokens";
+import { KAFKA_HEADER_NAMES } from "../kafka-headers";
+import { KafkaProducerService } from "../kafka-producer.service";
 import {
   KafkaRetryPolicy,
   type KafkaRetryDecision
@@ -21,7 +21,7 @@ import type {
   KafkaConsumerMessageContext,
   KafkaHeaders,
   KafkaModuleOptions
-} from "./types";
+} from "../types";
 
 /**
  * Публикует сообщение на следующий этап retry-цепочки или в DLQ.

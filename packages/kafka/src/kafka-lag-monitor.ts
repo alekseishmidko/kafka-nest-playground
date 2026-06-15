@@ -8,7 +8,7 @@ import {
 } from "@nestjs/common";
 import { ApplicationMetrics } from "@kafka-playground/observability";
 import { Kafka, logLevel, type Admin } from "kafkajs";
-import { KafkaConsumerRunner } from "./kafka-consumer-runner";
+import { KafkaConsumerRunner } from "./consumer/kafka-consumer-runner";
 import { KAFKA_MODULE_OPTIONS } from "./kafka.tokens";
 import type { KafkaModuleOptions } from "./types";
 
