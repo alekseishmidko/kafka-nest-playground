@@ -1,14 +1,14 @@
 import { DynamicModule, Global, Module, Provider, Type } from "@nestjs/common";
-import { KafkaConsumerRunner } from "./kafka-consumer-runner";
+import { KafkaConsumerRunner } from "./consumer/kafka-consumer-runner";
 import { KafkaEventLogger } from "./kafka-logger";
 import { KafkaProducerService } from "./kafka-producer.service";
-import { KafkaRetryDispatcher } from "./kafka-retry-dispatcher";
-import { KafkaRetryPolicy } from "./kafka-retry-policy";
+import { KafkaRetryDispatcher } from "./retry/kafka-retry-dispatcher";
+import { KafkaRetryPolicy } from "./retry/kafka-retry-policy";
 import { KafkaLagMonitor } from "./kafka-lag-monitor";
 import {
-  KafkaIdempotentEventProcessor,
-  type KafkaInboxStore
-} from "./kafka-consumer-inbox";
+  KafkaIdempotentEventProcessor
+} from "./inbox/kafka-idempotent-event-processor";
+import type { KafkaInboxStore } from "./inbox/kafka-inbox-store";
 import {
   KAFKA_CONSUMER_CLIENT,
   KAFKA_INBOX_STORE,

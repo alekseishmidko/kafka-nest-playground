@@ -3,13 +3,22 @@ import type {
   KafkaProducerClient,
   KafkaProducerClientMessage,
   KafkaProducerRecordMetadata
-} from "./types";
+} from "../types";
 
+/**
+ * Параметры низкоуровневого KafkaJS producer adapter-а.
+ */
 export interface KafkaJsProducerClientOptions {
   clientId: string;
   brokers: string[];
 }
 
+/**
+ * Адаптирует KafkaJS Producer к внутреннему `KafkaProducerClient`.
+ *
+ * Соединение открывается лениво при первой публикации и переиспользуется между
+ * вызовами. Ошибка подключения сбрасывает promise, разрешая следующую попытку.
+ */
 export class KafkaJsProducerClient implements KafkaProducerClient {
   private readonly producer: Producer;
   private connectPromise: Promise<void> | null = null;
@@ -24,6 +33,9 @@ export class KafkaJsProducerClient implements KafkaProducerClient {
     });
   }
 
+  /**
+   * Публикует подготовленную запись и возвращает нормализованную metadata.
+   */
   async send(message: KafkaProducerClientMessage): Promise<KafkaProducerRecordMetadata[]> {
     await this.connect();
 

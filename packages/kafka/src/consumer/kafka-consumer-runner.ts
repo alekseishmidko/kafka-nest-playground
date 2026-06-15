@@ -18,18 +18,18 @@ import {
   runInTraceSpan,
   SpanKind
 } from "@kafka-playground/observability";
-import { KafkaNonRetryableError } from "./kafka-errors";
-import { KAFKA_CONSUMER_CLIENT, SCHEMA_REGISTRY_CODEC } from "./kafka.tokens";
-import { readHeader, KAFKA_HEADER_NAMES } from "./kafka-headers";
-import { KafkaEventLogger } from "./kafka-logger";
-import { KafkaRetryDispatcher } from "./kafka-retry-dispatcher";
-import { KafkaRetryPolicy } from "./kafka-retry-policy";
+import { KafkaNonRetryableError } from "../kafka-errors";
+import { KAFKA_CONSUMER_CLIENT, SCHEMA_REGISTRY_CODEC } from "../kafka.tokens";
+import { readHeader, KAFKA_HEADER_NAMES } from "../kafka-headers";
+import { KafkaEventLogger } from "../kafka-logger";
+import { KafkaRetryDispatcher } from "../retry/kafka-retry-dispatcher";
+import { KafkaRetryPolicy } from "../retry/kafka-retry-policy";
 import type {
   KafkaConsumeHandler,
   KafkaConsumerClient,
   KafkaConsumerMessageContext,
   SchemaRegistryCodec
-} from "./types";
+} from "../types";
 
 interface KafkaConsumerRegistration {
   topics: KafkaTopicName[];
