@@ -1,7 +1,7 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
+import { OutboxEventEntity } from "@kafka-playground/outbox";
 import { OrdersModule } from "../orders/orders.module";
-import { OutboxEventEntity } from "../orders/entities/outbox-event.entity";
 import { DlqConsumer } from "./dlq.consumer";
 import { DlqController } from "./dlq.controller";
 import { DlqRepository } from "./dlq.repository";

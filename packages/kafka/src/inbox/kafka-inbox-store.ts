@@ -60,6 +60,15 @@ export interface KafkaInboxStore {
 }
 
 /**
+ * Унифицированное имя consumer-side хранилища идемпотентности.
+ *
+ * `KafkaInboxStore` сохранён как историческое имя kafka-пакета, а
+ * `IdempotentConsumerStore` используется в общей документации рядом с
+ * producer-side `TransactionalMessageStore` из `@kafka-playground/outbox`.
+ */
+export type IdempotentConsumerStore = KafkaInboxStore;
+
+/**
  * Результат идемпотентной обработки, доступный вызывающему consumer-у.
  */
 export interface KafkaIdempotentProcessingResult<TResult> {

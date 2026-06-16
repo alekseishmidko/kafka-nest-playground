@@ -93,6 +93,17 @@ KafkaModule.register({
 `notification-service` от повторного выполнения одного события после
 перезапуска consumer-а или повторной доставки Kafka.
 
+Producer-side пара для этого механизма находится в `@kafka-playground/outbox`.
+Обе части вместе закрывают основной message-flow:
+
+```text
+DB transaction -> outbox -> Kafka -> inbox -> handler
+```
+
+Outbox отвечает за то, чтобы событие не потерялось после DB commit. Inbox
+отвечает за то, чтобы повторная доставка Kafka не выполнила бизнес-side effect
+повторно.
+
 Обработка разделена на две фазы:
 
 1. Consumer атомарно захватывает `(consumer_name, event_id)` с временной lease.

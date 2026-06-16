@@ -9,8 +9,8 @@ import {
 } from "@kafka-playground/contracts";
 import { randomUUID } from "node:crypto";
 import { PinoLogger } from "@kafka-playground/observability";
+import { OutboxPublisherService } from "@kafka-playground/outbox";
 import type { CreateOrderDto } from "./dto/create-order.dto";
-import { OutboxPublisherService } from "./outbox-publisher.service";
 import { OrdersRepository } from "./orders.repository";
 import type { OrderLifecycleEvent } from "./order-state-machine";
 import { assertValidOrderId } from "./order-id";

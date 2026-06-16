@@ -5,12 +5,12 @@
   "type": "commonjs",
   "scripts": {
     "dev": "nest start --watch",
-    "build": "pnpm --filter @kafka-playground/config build && pnpm --filter @kafka-playground/contracts build && pnpm --filter @kafka-playground/kafka build && pnpm --filter @kafka-playground/observability build && nest build",
+    "build": "pnpm --filter @kafka-playground/config build && pnpm --filter @kafka-playground/contracts build && pnpm --filter @kafka-playground/kafka build && pnpm --filter @kafka-playground/observability build && pnpm --filter @kafka-playground/outbox build && nest build",
     "start": "node dist/main.js",
     "start:prod": "node dist/main.js",
     "migration:run": "pnpm build && typeorm migration:run -d dist/database/order-service.data-source.js",
     "migration:revert": "pnpm build && typeorm migration:revert -d dist/database/order-service.data-source.js",
-    "prelint": "pnpm --filter @kafka-playground/config build && pnpm --filter @kafka-playground/contracts build && pnpm --filter @kafka-playground/kafka build && pnpm --filter @kafka-playground/observability build",
+    "prelint": "pnpm --filter @kafka-playground/config build && pnpm --filter @kafka-playground/contracts build && pnpm --filter @kafka-playground/kafka build && pnpm --filter @kafka-playground/observability build && pnpm --filter @kafka-playground/outbox build",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm build && node --test test/*.test.cjs"
   },
@@ -21,6 +21,7 @@
     "@kafka-playground/contracts": "workspace:^",
     "@kafka-playground/kafka": "workspace:^",
     "@kafka-playground/observability": "workspace:^",
+    "@kafka-playground/outbox": "workspace:^",
     "@nestjs/common": "^11.0.0",
     "@nestjs/config": "^4.0.0",
     "@nestjs/core": "^11.0.0",

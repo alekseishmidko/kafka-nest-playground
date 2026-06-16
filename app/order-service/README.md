@@ -10,6 +10,11 @@
 - Kafka consumers обрабатывают risk, payment и DLQ events;
 - PostgreSQL хранит заказы, outbox, consumer idempotency и DLQ.
 
+Outbox-инфраструктура вынесена в общий пакет `@kafka-playground/outbox`.
+`order-service` остаётся владельцем доменных транзакций и схемы таблицы, но
+publisher, TypeORM entity и store-контракты теперь переиспользуемы другими
+сервисами.
+
 ## Метрики
 
 Prometheus endpoint:

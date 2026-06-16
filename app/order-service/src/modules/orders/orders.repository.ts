@@ -11,7 +11,10 @@ import {
   type KafkaTopicName,
   type OrderCreatedEvent
 } from "@kafka-playground/contracts";
-import { OutboxEventEntity, OutboxEventStatus } from "./entities/outbox-event.entity";
+import {
+  OutboxEventEntity,
+  OutboxEventStatus
+} from "@kafka-playground/outbox";
 import { OrderEntity, OrderStatus, type OrderItemSnapshot } from "./entities/order.entity";
 import {
   createFinalOrderEvent,

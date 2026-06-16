@@ -1,8 +1,8 @@
 import { DataSource, type DataSourceOptions } from "typeorm";
 import { getServiceEnvFilePaths, loadServiceEnvFiles } from "@kafka-playground/config";
+import { OutboxEventEntity } from "@kafka-playground/outbox";
 import { join } from "node:path";
 import { OrderEntity } from "../modules/orders/entities/order.entity";
-import { OutboxEventEntity } from "../modules/orders/entities/outbox-event.entity";
 import { ProcessedKafkaEventEntity } from "../modules/orders/entities/processed-kafka-event.entity";
 import { CreateOrderServiceSchema1717977600000 } from "./migrations/1717977600000-create-order-service-schema";
 import { AddFinalOrderStatuses1718064000000 } from "./migrations/1718064000000-add-final-order-statuses";
