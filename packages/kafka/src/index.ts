@@ -1,4 +1,5 @@
 export * from "./consumer/kafka-consumer-runner";
+export * from "./core";
 export * from "./inbox/deterministic-event-id";
 export * from "./inbox/kafka-idempotent-event-processor";
 export * from "./inbox/kafka-inbox-store";
@@ -10,6 +11,7 @@ export * from "./kafka-lag-monitor";
 export * from "./kafka-module";
 export * from "./kafka-producer.service";
 export * from "./retry/kafka-retry-dispatcher";
+export * from "./retry/configurable-kafka-retry-policy";
 export * from "./retry/kafka-retry-policy";
 export * from "./kafka.tokens";
 export * from "./adapters/kafkajs-consumer-client";

@@ -16,6 +16,10 @@ type OrderStatusEvent =
   | PaymentAuthorizedEvent
   | PaymentFailedEvent;
 
+type OrderStatusTopic =
+  | typeof EVENT_TOPIC_MAP.OrderRiskApproved
+  | typeof EVENT_TOPIC_MAP.PaymentAuthorized;
+
 @Injectable()
 export class OrdersEventsConsumer implements OnModuleInit {
   constructor(
@@ -27,7 +31,7 @@ export class OrdersEventsConsumer implements OnModuleInit {
   }
 
   async onModuleInit(): Promise<void> {
-    await this.consumerRunner.subscribeMany<OrderStatusEvent>(
+    await this.consumerRunner.subscribeMany<OrderStatusEvent, OrderStatusTopic>(
       {
         topics: [EVENT_TOPIC_MAP.OrderRiskApproved, EVENT_TOPIC_MAP.PaymentAuthorized]
       },

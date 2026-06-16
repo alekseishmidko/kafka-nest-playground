@@ -1,7 +1,8 @@
 # @kafka-playground/kafka
 
-Общий NestJS-пакет для публикации и обработки Kafka-событий через KafkaJS и
-Confluent Schema Registry.
+Переиспользуемый Kafka toolkit для публикации, обработки, retry/DLQ и durable
+inbox. Пакет можно использовать целиком в NestJS-сервисах текущего playground
+или частично через универсальное ядро `@kafka-playground/kafka/core`.
 
 Пакет содержит:
 
@@ -9,22 +10,82 @@ Confluent Schema Registry.
 - Avro-сериализацию через Schema Registry;
 - стандартные tracing headers;
 - структурированные Kafka-логи;
-- retry policy для событий жизненного цикла заказа;
+- конфигурируемую retry policy без привязки к конкретным topics;
+- готовый order-flow preset для текущего проекта;
 - публикацию необработанных событий в `dead-letter.events`.
 
 ## Структура пакета
 
 ```text
 src/
+  core/       # framework-agnostic entrypoint: типы, headers, errors, retry policy
   adapters/   # KafkaJS clients и другие внешние транспортные адаптеры
   consumer/   # orchestration подписок и message loop
   inbox/      # durable inbox: контракты, processor и PostgreSQL adapter
-  retry/      # чистая retry policy и публикация retry/DLQ
+  retry/      # configurable policy, order-flow preset и публикация retry/DLQ
 ```
 
 Корневой `index.ts` сохраняет единый публичный API пакета. Приложения импортируют
 компоненты через `@kafka-playground/kafka` и не зависят от внутреннего
 расположения файлов.
+
+## Переиспользование в других проектах
+
+Для проектов, которым нужны только типы, headers и чистая retry policy, есть
+отдельный entrypoint:
+
+```ts
+import {
+  ConfigurableKafkaRetryPolicy,
+  KAFKA_HEADER_NAMES,
+  KafkaDomainEvent
+} from "@kafka-playground/kafka/core";
+```
+
+`core` не требует NestJS-модуля, PostgreSQL inbox adapter-а или contracts
+текущего playground-проекта. Минимальный контракт события описан типом
+`KafkaDomainEvent`: `eventId`, `eventType`, `eventVersion`, `occurredAt`,
+`correlationId`, `causationId`, `producer`, `payload`.
+
+Пример retry-цепочки для другого bounded context:
+
+```ts
+const retryPolicy = new ConfigurableKafkaRetryPolicy({
+  sourceTopics: ["billing.invoice-events"],
+  stages: [
+    {
+      topic: "billing.invoice-events.retry-10s",
+      delayMs: 10_000
+    },
+    {
+      topic: "billing.invoice-events.retry-1m",
+      delayMs: 60_000
+    }
+  ],
+  deadLetterTopic: "billing.dead-letter"
+});
+```
+
+NestJS-слой остаётся опциональным adapter-ом. При регистрации модуля можно
+передать свои clients, inbox store, DLQ topic и resolver Schema Registry subject:
+
+```ts
+KafkaModule.register({
+  clientId: "billing-service",
+  serviceName: "billing-service",
+  brokers: ["localhost:9092"],
+  schemaRegistryUrl: "http://localhost:8081",
+  deadLetterTopic: "billing.dead-letter",
+  subjectResolver: ({ topic, eventType }) => `${topic}.${eventType}.v1`,
+  producerClient,
+  consumerClient,
+  inboxStore
+});
+```
+
+Если `subjectResolver` не задан, producer использует универсальное имя
+`${topic}-${eventType}-value`. Текущий playground order-flow продолжает
+использовать этот формат, поэтому существующие Avro subjects не меняются.
 
 ## Durable consumer inbox
 
@@ -162,7 +223,7 @@ Retry создаёт дочерний `kafka retry dispatch`, а термина�
 
 ## Ответственность компонентов
 
-### `KafkaRetryPolicy`
+### `ConfigurableKafkaRetryPolicy`
 
 Чистая политика маршрутизации. Она не использует Kafka и таймеры, а только:
 
@@ -171,6 +232,13 @@ Retry создаёт дочерний `kafka retry dispatch`, а термина�
 - определяет следующий topic;
 - рассчитывает retry headers;
 - определяет момент перехода в DLQ.
+
+### `KafkaRetryPolicy`
+
+Готовый NestJS provider для текущего order-flow. Он наследует
+`ConfigurableKafkaRetryPolicy` и подставляет topics из
+`@kafka-playground/contracts`. Для нового проекта предпочтительнее создать
+собственный instance `ConfigurableKafkaRetryPolicy` со своими topics.
 
 ### `KafkaRetryDispatcher`
 

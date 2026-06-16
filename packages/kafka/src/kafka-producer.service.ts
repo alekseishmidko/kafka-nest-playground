@@ -1,5 +1,4 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { EVENT_SCHEMA_SUBJECTS } from "@kafka-playground/contracts";
 import {
   injectTraceContext,
   runInTraceSpan,
@@ -7,16 +6,31 @@ import {
 } from "@kafka-playground/observability";
 import { buildKafkaHeaders } from "./kafka-headers";
 import { KafkaEventLogger } from "./kafka-logger";
-import { KAFKA_PRODUCER_CLIENT, SCHEMA_REGISTRY_CODEC } from "./kafka.tokens";
+import {
+  KAFKA_MODULE_OPTIONS,
+  KAFKA_PRODUCER_CLIENT,
+  SCHEMA_REGISTRY_CODEC
+} from "./kafka.tokens";
 import type {
   KafkaProducerClient,
+  KafkaModuleOptions,
   KafkaPublishOptions,
   SchemaRegistryCodec
 } from "./types";
 
+/**
+ * Высокоуровневый producer для доменных событий.
+ *
+ * Сервис не привязан к конкретному набору eventType. Subject для Schema
+ * Registry вычисляется через `KafkaModuleOptions.subjectResolver`, а если
+ * resolver не задан, используется универсальное имя
+ * `${topic}-${eventType}-value`.
+ */
 @Injectable()
 export class KafkaProducerService {
   constructor(
+    @Inject(KAFKA_MODULE_OPTIONS)
+    private readonly options: KafkaModuleOptions,
     @Inject(KAFKA_PRODUCER_CLIENT)
     private readonly producer: KafkaProducerClient,
     @Inject(SCHEMA_REGISTRY_CODEC)
@@ -82,6 +96,12 @@ export class KafkaProducerService {
   }
 
   private getSubject(options: KafkaPublishOptions): string {
-    return EVENT_SCHEMA_SUBJECTS[options.event.eventType] ?? `${options.topic}-value`;
+    return (
+      this.options.subjectResolver?.({
+        topic: options.topic,
+        eventType: options.event.eventType,
+        event: options.event
+      }) ?? `${options.topic}-${options.event.eventType}-value`
+    );
   }
 }

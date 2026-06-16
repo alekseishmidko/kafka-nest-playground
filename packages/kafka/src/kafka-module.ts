@@ -20,12 +20,32 @@ import { SchemaRegistryAvroCodec } from "./schema-registry-avro-codec";
 import type { KafkaConsumerClient, KafkaModuleOptions, KafkaProducerClient } from "./types";
 
 export interface KafkaModuleRegisterOptions extends KafkaModuleOptions {
+  /**
+   * Низкоуровневый producer adapter.
+   *
+   * В текущем проекте обычно используется `KafkaJsProducerClient`, но другой
+   * проект может передать adapter для franz-go proxy, mock producer или любой
+   * другой реализации, которая соблюдает контракт `KafkaProducerClient`.
+   */
   producerClient?: KafkaProducerClient;
+  /**
+   * Низкоуровневый consumer adapter.
+   *
+   * Adapter скрывает детали KafkaJS и позволяет тестировать orchestration через
+   * in-memory fake без запуска Kafka broker-а.
+   */
   consumerClient?: KafkaConsumerClient;
   /** Durable inbox обязателен только сервисам, использующим idempotent processor. */
   inboxStore?: KafkaInboxStore;
 }
 
+/**
+ * Опции асинхронной регистрации KafkaModule.
+ *
+ * Используются, когда Kafka-настройки читаются из ConfigService или другого
+ * DI-provider-а. Factory возвращает тот же контракт, что и синхронный
+ * `register`.
+ */
 export interface KafkaModuleAsyncOptions {
   imports?: DynamicModule["imports"];
   inject?: Array<string | symbol | Type<unknown>>;
@@ -36,7 +56,17 @@ export interface KafkaModuleAsyncOptions {
 
 @Global()
 @Module({})
+/**
+ * NestJS adapter поверх универсальных Kafka-компонентов.
+ *
+ * Модуль собирает producer, consumer runner, retry dispatcher, lag monitor и
+ * durable inbox processor в DI-граф. Универсальные алгоритмы остаются вне
+ * NestJS-зависимостей, а этот класс отвечает только за wiring provider-ов.
+ */
 export class KafkaModule {
+  /**
+   * Регистрирует Kafka-инфраструктуру со статически известными настройками.
+   */
   static register(options: KafkaModuleRegisterOptions): DynamicModule {
     const providers: Provider[] = [
       {
@@ -87,6 +117,9 @@ export class KafkaModule {
     };
   }
 
+  /**
+   * Регистрирует Kafka-инфраструктуру через async factory.
+   */
   static registerAsync(options: KafkaModuleAsyncOptions): DynamicModule {
     const providers: Provider[] = [
       {
