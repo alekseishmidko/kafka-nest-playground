@@ -7,9 +7,11 @@ import {
   ApplicationMetrics,
   PinoLogger
 } from "@kafka-playground/observability";
+import {
+  OutboxEventStatus,
+  PostgresOutboxStore
+} from "@kafka-playground/outbox";
 import { DlqRepository } from "../dlq/dlq.repository";
-import { OutboxEventStatus } from "../orders/entities/outbox-event.entity";
-import { OutboxRepository } from "../orders/outbox.repository";
 
 /**
  * Синхронизирует Prometheus gauges с фактическим состоянием PostgreSQL.
@@ -27,7 +29,7 @@ export class OperationalMetricsCollector
   private collecting = false;
 
   constructor(
-    private readonly outboxRepository: OutboxRepository,
+    private readonly outboxRepository: PostgresOutboxStore,
     private readonly dlqRepository: DlqRepository,
     private readonly metrics: ApplicationMetrics,
     private readonly logger: PinoLogger

@@ -19,9 +19,9 @@ import {
 } from "@kafka-playground/observability";
 import {
   OutboxEventEntity,
-  OutboxEventStatus
-} from "../orders/entities/outbox-event.entity";
-import { OutboxPublisherService } from "../orders/outbox-publisher.service";
+  OutboxEventStatus,
+  OutboxPublisherService
+} from "@kafka-playground/outbox";
 import {
   createReprocessedEvent,
   type CorrectedPayload

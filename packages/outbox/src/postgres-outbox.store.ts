@@ -1,30 +1,26 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { LessThanOrEqual, Repository } from "typeorm";
-import type { DomainEvent, KafkaTopicName } from "@kafka-playground/contracts";
-import { OutboxEventEntity, OutboxEventStatus } from "./entities/outbox-event.entity";
+import {
+  OutboxEventEntity,
+  OutboxEventStatus
+} from "./outbox-event.entity";
+import type {
+  CreateOutboxEventParams,
+  TransactionalMessageStore
+} from "./outbox-message-store";
 
 /**
- * Данные, достаточные для постановки доменного события в outbox.
- */
-export interface CreateOutboxEventParams {
-  /** Kafka topic, определённый контрактами события. */
-  topic: KafkaTopicName;
-  /** Kafka key, обычно id агрегата, по которому нужен ordering. */
-  messageKey: string;
-  /** Полный domain envelope, который будет опубликован без пересборки. */
-  event: DomainEvent;
-}
-
-/**
- * Репозиторий для outbox-таблицы.
+ * PostgreSQL/TypeORM реализация transactional outbox store.
  *
- * Здесь намеренно нет Kafka-зависимостей: этот слой только выбирает события,
- * меняет их статус и хранит retry metadata. Публикация остаётся в
- * `OutboxPublisherService`.
+ * Store не публикует сообщения и не знает о Kafka. Его ответственность:
+ * создавать `PENDING` entity, выбирать publishable-записи, сохранять результат
+ * попытки публикации и отдавать snapshot для метрик.
  */
 @Injectable()
-export class OutboxRepository {
+export class PostgresOutboxStore
+  implements TransactionalMessageStore<OutboxEventEntity>
+{
   constructor(
     @InjectRepository(OutboxEventEntity)
     private readonly repository: Repository<OutboxEventEntity>
@@ -33,8 +29,9 @@ export class OutboxRepository {
   /**
    * Создаёт entity в статусе `PENDING`, но не сохраняет её.
    *
-   * Метод оставлен для сценариев, где вызывающий код сам управляет транзакцией
-   * и хочет сохранить outbox-запись вместе с другими entity через один manager.
+   * Вызывающий код сохраняет entity через свой transaction manager вместе с
+   * бизнес-сущностями. Это ключевая гарантия transactional outbox: бизнес-факт
+   * и намерение отправить событие попадают в БД атомарно.
    */
   createPending(params: CreateOutboxEventParams): OutboxEventEntity {
     return this.repository.create({
@@ -43,6 +40,7 @@ export class OutboxRepository {
       eventType: params.event.eventType,
       eventId: params.event.eventId,
       event: params.event,
+      traceContext: params.traceContext ?? null,
       status: OutboxEventStatus.Pending
     });
   }
@@ -50,13 +48,9 @@ export class OutboxRepository {
   /**
    * Возвращает события, которые можно публиковать прямо сейчас.
    *
-   * В выборку попадают:
-   * - новые `PENDING` события;
-   * - `FAILED` события, у которых уже прошёл `nextAttemptAt`.
-   *
-   * Порядок по `createdAt` делает отправку предсказуемой для одного процесса.
-   * Для нескольких publisher-инстансов позже понадобится row locking
-   * (`FOR UPDATE SKIP LOCKED`) или отдельный lease-механизм.
+   * В выборку попадают новые `PENDING` события и `FAILED` события, у которых
+   * уже прошёл `nextAttemptAt`. Для нескольких publisher-инстансов в будущем
+   * стоит заменить этот метод на lease или `FOR UPDATE SKIP LOCKED`.
    */
   async findPublishable(limit: number): Promise<OutboxEventEntity[]> {
     const now = new Date();
@@ -77,12 +71,7 @@ export class OutboxRepository {
   }
 
   /**
-   * Помечает outbox-запись как опубликованную.
-   *
-   * Эта операция выполняется только после успешного Kafka publish. Если процесс
-   * упадёт после publish, но до этого update, событие может быть отправлено
-   * повторно. Это ожидаемый tradeoff outbox-паттерна, который закрывается
-   * идемпотентностью consumer-ов.
+   * Помечает запись как опубликованную.
    */
   async markPublished(id: string): Promise<void> {
     await this.repository.update(
@@ -97,9 +86,6 @@ export class OutboxRepository {
 
   /**
    * Сохраняет ошибку публикации и планирует следующую попытку.
-   *
-   * Backoff ограничен сверху, чтобы временная недоступность Kafka не создавала
-   * tight loop и не забивала логи одинаковыми ошибками каждую миллисекунду.
    */
   async markFailed(id: string, attempts: number, error: unknown): Promise<void> {
     await this.repository.update(
@@ -139,10 +125,15 @@ export class OutboxRepository {
 }
 
 /**
+ * Backward-compatible alias для сервисов, где старое имя уже отражено в DI.
+ */
+export { PostgresOutboxStore as OutboxRepository };
+
+/**
  * Рассчитывает время следующего retry по экспоненциальному backoff.
  */
 function nextAttemptAt(attempts: number): Date {
-  const retryDelayMs = Math.min(30000, 1000 * 2 ** Math.max(0, attempts - 1));
+  const retryDelayMs = Math.min(30_000, 1000 * 2 ** Math.max(0, attempts - 1));
 
   return new Date(Date.now() + retryDelayMs);
 }
