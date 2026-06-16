@@ -4,7 +4,6 @@ import {
   Optional,
   type OnApplicationShutdown
 } from "@nestjs/common";
-import type { DomainEvent } from "@kafka-playground/contracts";
 import {
   ApplicationMetrics,
   PinoLogger
@@ -13,6 +12,7 @@ import { randomUUID } from "node:crypto";
 import { KAFKA_INBOX_STORE, KAFKA_MODULE_OPTIONS } from "../kafka.tokens";
 import type {
   KafkaConsumerMessageContext,
+  KafkaDomainEvent,
   KafkaModuleOptions
 } from "../types";
 import {
@@ -60,7 +60,7 @@ export class KafkaIdempotentEventProcessor implements OnApplicationShutdown {
    * она содержит тот же `eventId`. Downstream consumer отсекает такой дубль по
    * собственному inbox, что соответствует модели at-least-once Kafka.
    */
-  async process<TEvent extends DomainEvent, TResult>(
+  async process<TEvent extends KafkaDomainEvent, TResult>(
     context: KafkaConsumerMessageContext<TEvent>,
     prepare: () => Promise<TResult> | TResult,
     effect: (result: TResult) => Promise<void>

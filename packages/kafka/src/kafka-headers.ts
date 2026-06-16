@@ -1,6 +1,4 @@
-import type { DomainEvent } from "@kafka-playground/contracts";
-import { TRACE_HEADER_NAMES } from "@kafka-playground/observability";
-import type { KafkaHeaderInput, KafkaHeaders } from "./types";
+import type { KafkaDomainEvent, KafkaHeaderInput, KafkaHeaders } from "./types";
 
 /**
  * Канонические имена технических Kafka headers.
@@ -18,10 +16,10 @@ export const KAFKA_HEADER_NAMES = {
   originalTopic: "x-original-topic",
   firstFailedAt: "x-first-failed-at",
   errorCode: "x-error-code",
-  traceParent: TRACE_HEADER_NAMES.traceParent,
-  traceState: TRACE_HEADER_NAMES.traceState,
-  traceId: TRACE_HEADER_NAMES.traceId,
-  spanId: TRACE_HEADER_NAMES.spanId
+  traceParent: "traceparent",
+  traceState: "tracestate",
+  traceId: "x-trace-id",
+  spanId: "x-span-id"
 } as const;
 
 /**
@@ -32,7 +30,7 @@ export const KAFKA_HEADER_NAMES = {
  * не может случайно подменить `eventId`, `eventType` или `correlationId`.
  */
 export function buildKafkaHeaders(
-  event: DomainEvent,
+  event: KafkaDomainEvent,
   extraHeaders: KafkaHeaderInput = {}
 ): KafkaHeaders {
   return compactHeaders({

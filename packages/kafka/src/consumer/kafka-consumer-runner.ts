@@ -6,11 +6,6 @@ import {
   type OnApplicationShutdown
 } from "@nestjs/common";
 import {
-  KAFKA_TOPICS,
-  type DomainEvent,
-  type KafkaTopicName
-} from "@kafka-playground/contracts";
-import {
   ApplicationMetrics,
   extractTraceContext,
   getActiveTraceLogFields,
@@ -28,6 +23,8 @@ import type {
   KafkaConsumeHandler,
   KafkaConsumerClient,
   KafkaConsumerMessageContext,
+  KafkaDomainEvent,
+  KafkaTopicName,
   SchemaRegistryCodec
 } from "../types";
 
@@ -90,12 +87,15 @@ export class KafkaConsumerRunner
   /**
    * Регистрирует handler одного основного topic.
    */
-  async subscribe<TEvent extends DomainEvent>(
+  async subscribe<
+    TEvent extends KafkaDomainEvent,
+    TTopic extends KafkaTopicName = KafkaTopicName
+  >(
     options: {
-      topic: KafkaConsumerMessageContext<TEvent>["topic"];
+      topic: TTopic;
       fromBeginning?: boolean;
     },
-    handler: KafkaConsumeHandler<TEvent>
+    handler: KafkaConsumeHandler<TEvent, TTopic>
   ): Promise<void> {
     this.register(
       [options.topic],
@@ -110,12 +110,15 @@ export class KafkaConsumerRunner
    * Метод намеренно не вызывает `consumer.run()`: запуск до завершения
    * инициализации NestJS не позволил бы безопасно добавить второй consumer.
    */
-  async subscribeMany<TEvent extends DomainEvent>(
+  async subscribeMany<
+    TEvent extends KafkaDomainEvent,
+    TTopic extends KafkaTopicName = KafkaTopicName
+  >(
     options: {
-      topics: Array<KafkaConsumerMessageContext<TEvent>["topic"]>;
+      topics: TTopic[];
       fromBeginning?: boolean;
     },
-    handler: KafkaConsumeHandler<TEvent>
+    handler: KafkaConsumeHandler<TEvent, TTopic>
   ): Promise<void> {
     this.register(
       options.topics,
@@ -139,10 +142,13 @@ export class KafkaConsumerRunner
     ];
   }
 
-  private register<TEvent extends DomainEvent>(
-    topics: KafkaTopicName[],
+  private register<
+    TEvent extends KafkaDomainEvent,
+    TTopic extends KafkaTopicName = KafkaTopicName
+  >(
+    topics: TTopic[],
     fromBeginning: boolean | undefined,
-    handler: KafkaConsumeHandler<TEvent>
+    handler: KafkaConsumeHandler<TEvent, TTopic>
   ): void {
     if (this.started) {
       throw new Error(
@@ -218,7 +224,7 @@ export class KafkaConsumerRunner
               }
             },
             async () => {
-              let event: DomainEvent | undefined;
+              let event: KafkaDomainEvent | undefined;
               let startedAt: bigint | undefined;
 
               try {
@@ -233,7 +239,7 @@ export class KafkaConsumerRunner
                 }
 
                 const decodedEvent =
-                  await this.codec.deserialize<DomainEvent>(message.value);
+                  await this.codec.deserialize<KafkaDomainEvent>(message.value);
                 event = decodedEvent;
                 const traceFields = getActiveTraceLogFields();
                 const consumerContext: KafkaConsumerMessageContext = {
@@ -394,10 +400,7 @@ export class KafkaConsumerRunner
       headers,
       KAFKA_HEADER_NAMES.originalTopic
     );
-    const handlerTopic =
-      originalTopic && isKafkaTopicName(originalTopic)
-        ? originalTopic
-        : currentTopic;
+    const handlerTopic = originalTopic ?? currentTopic;
 
     return this.registrations.find((registration) =>
       registration.topics.includes(handlerTopic)
@@ -433,10 +436,6 @@ function sleep(delayMs: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, delayMs);
   });
-}
-
-function isKafkaTopicName(value: string): value is KafkaTopicName {
-  return Object.values(KAFKA_TOPICS).includes(value as KafkaTopicName);
 }
 
 function elapsedSeconds(startedAt: bigint | undefined): number {

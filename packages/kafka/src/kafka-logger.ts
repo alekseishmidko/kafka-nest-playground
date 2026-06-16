@@ -1,6 +1,13 @@
 import { Injectable, Logger } from "@nestjs/common";
-import type { DomainEvent } from "@kafka-playground/contracts";
+import type { KafkaDomainEvent } from "./types";
 
+/**
+ * NestJS-logger adapter для Kafka-событий.
+ *
+ * Логгер принимает минимальный `KafkaDomainEvent`, поэтому не зависит от
+ * конкретного contracts-пакета приложения. В другом проекте можно заменить этот
+ * provider своим adapter-ом, сохранив те же методы.
+ */
 @Injectable()
 export class KafkaEventLogger {
   private readonly logger = new Logger(KafkaEventLogger.name);
@@ -9,7 +16,7 @@ export class KafkaEventLogger {
     topic: string;
     partition?: number;
     offset?: string;
-    event: DomainEvent;
+    event: KafkaDomainEvent;
   }): void {
     this.logger.log({
       message: "Kafka event produced",
@@ -26,7 +33,7 @@ export class KafkaEventLogger {
     topic: string;
     partition: number;
     offset: string;
-    event: DomainEvent;
+    event: KafkaDomainEvent;
   }): void {
     this.logger.log({
       message: "Kafka event consumed",

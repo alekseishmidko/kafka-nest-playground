@@ -1,10 +1,5 @@
 import { Inject, Injectable, Optional } from "@nestjs/common";
 import {
-  KAFKA_TOPICS,
-  type DeadLetterEvent,
-  type DomainEvent
-} from "@kafka-playground/contracts";
-import {
   ApplicationMetrics,
   runInTraceSpan,
   SpanKind
@@ -19,6 +14,7 @@ import {
 } from "./kafka-retry-policy";
 import type {
   KafkaConsumerMessageContext,
+  KafkaDomainEvent,
   KafkaHeaders,
   KafkaModuleOptions
 } from "../types";
@@ -28,7 +24,8 @@ import type {
  *
  * Dispatcher отвечает только за создание Kafka-сообщения. Решение о маршруте
  * принимает `KafkaRetryPolicy`, а задержку перед повторной обработкой реализует
- * `KafkaConsumerRunner`.
+ * `KafkaConsumerRunner`. Topic DLQ берётся из `KafkaModuleOptions`, поэтому
+ * класс не привязан к topic constants конкретного проекта.
  */
 @Injectable()
 export class KafkaRetryDispatcher {
@@ -48,7 +45,7 @@ export class KafkaRetryDispatcher {
    * `eventId`, `correlationId` и payload. Это позволяет downstream-сервисам
    * сохранить идемпотентность на всех retry-этапах.
    */
-  async dispatch<TEvent extends DomainEvent>(params: {
+  async dispatch<TEvent extends KafkaDomainEvent>(params: {
     context: KafkaConsumerMessageContext<TEvent>;
     error: unknown;
   }): Promise<KafkaRetryDecision> {
@@ -96,9 +93,9 @@ export class KafkaRetryDispatcher {
       "kafka dlq dispatch",
       {
         kind: SpanKind.PRODUCER,
-        attributes: {
-          "messaging.system": "kafka",
-          "messaging.destination.name": KAFKA_TOPICS.deadLetterEvents,
+          attributes: {
+            "messaging.system": "kafka",
+          "messaging.destination.name": this.deadLetterTopic,
           "messaging.operation.name": "dead_letter",
           "retry.count": decision.retryCount,
           "error.code": decision.errorCode,
@@ -117,7 +114,7 @@ export class KafkaRetryDispatcher {
     return decision;
   }
 
-  private async publishDeadLetter<TEvent extends DomainEvent>(params: {
+  private async publishDeadLetter<TEvent extends KafkaDomainEvent>(params: {
     context: KafkaConsumerMessageContext<TEvent>;
     error: unknown;
     decision: KafkaRetryDecision;
@@ -125,7 +122,14 @@ export class KafkaRetryDispatcher {
   }): Promise<void> {
     const occurredAt = new Date().toISOString();
     const error = normalizeError(params.error);
-    const deadLetterEvent: DeadLetterEvent = {
+    const deadLetterEvent: KafkaDomainEvent<{
+      originalTopic: string;
+      originalPartition: number;
+      originalOffset: string;
+      errorMessage: string;
+      errorStack: string | null;
+      rawEvent: string | null;
+    }, "DeadLetterEvent"> = {
       eventId: randomUUID(),
       eventType: "DeadLetterEvent",
       eventVersion: 1,
@@ -144,7 +148,7 @@ export class KafkaRetryDispatcher {
     };
 
     await this.producer.publish({
-      topic: KAFKA_TOPICS.deadLetterEvents,
+      topic: this.deadLetterTopic,
       key: params.context.key ?? params.context.event.eventId,
       event: deadLetterEvent,
       headers: params.headers
@@ -153,6 +157,10 @@ export class KafkaRetryDispatcher {
       params.decision.originalTopic,
       params.decision.errorCode
     );
+  }
+
+  private get deadLetterTopic(): string {
+    return this.options.deadLetterTopic ?? "dead-letter.events";
   }
 }
 
