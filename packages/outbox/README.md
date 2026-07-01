@@ -87,14 +87,11 @@ await dataSource.transaction(async (manager) => {
   const event = createOrderCreatedEvent(order);
 
   await manager.save(
-    manager.create(OutboxEventEntity, {
+    createOutboxEventEntity({
       topic: "order.order-events",
       messageKey: order.id,
-      eventType: event.eventType,
-      eventId: event.eventId,
       event,
-      traceContext: captureActiveTraceContext(),
-      status: OutboxEventStatus.Pending
+      traceContext: captureActiveTraceContext()
     })
   );
 });

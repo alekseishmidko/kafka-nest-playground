@@ -3,6 +3,7 @@ const { describe, it } = require("node:test");
 const {
   OutboxEventStatus,
   PostgresOutboxStore,
+  createOutboxEventEntity,
   createOutboxSchemaQueries,
   dropOutboxSchemaQueries,
   publishOutboxBatch
@@ -67,6 +68,86 @@ function createRepository() {
 }
 
 describe("shared outbox package", () => {
+  it("создаёт outbox entity из минимального публичного API", () => {
+    const event = createEvent();
+
+    const entity = createOutboxEventEntity({
+      topic: "billing.invoice-events",
+      messageKey: "invoice-1",
+      event,
+      traceContext: {
+        traceparent:
+          "00-11111111111111111111111111111111-2222222222222222-01"
+      }
+    });
+
+    assert.equal(entity.topic, "billing.invoice-events");
+    assert.equal(entity.messageKey, "invoice-1");
+    assert.equal(entity.eventType, event.eventType);
+    assert.equal(entity.eventId, event.eventId);
+    assert.equal(entity.event, event);
+    assert.equal(entity.status, OutboxEventStatus.Pending);
+    assert.equal(entity.attempts, 0);
+    assert.equal(entity.nextAttemptAt, null);
+    assert.equal(entity.publishedAt, null);
+    assert.equal(entity.lastError, null);
+  });
+
+  it("отклоняет outbox entity без обязательных routing-полей", () => {
+    assert.throws(
+      () =>
+        createOutboxEventEntity({
+          topic: "",
+          messageKey: "invoice-1",
+          event: createEvent()
+        }),
+      /topic must be a non-empty string/
+    );
+    assert.throws(
+      () =>
+        createOutboxEventEntity({
+          topic: "billing.invoice-events",
+          messageKey: " ",
+          event: createEvent()
+        }),
+      /messageKey must be a non-empty string/
+    );
+  });
+
+  it("отклоняет outbox entity с повреждённым event envelope", () => {
+    assert.throws(
+      () =>
+        createOutboxEventEntity({
+          topic: "billing.invoice-events",
+          messageKey: "invoice-1",
+          event: createEvent({ eventId: "" })
+        }),
+      /event\.eventId must be a non-empty string/
+    );
+    assert.throws(
+      () =>
+        createOutboxEventEntity({
+          topic: "billing.invoice-events",
+          messageKey: "invoice-1",
+          event: createEvent({ eventVersion: 0 })
+        }),
+      /event\.eventVersion must be a positive integer/
+    );
+
+    const eventWithoutPayload = createEvent();
+    delete eventWithoutPayload.payload;
+
+    assert.throws(
+      () =>
+        createOutboxEventEntity({
+          topic: "billing.invoice-events",
+          messageKey: "invoice-1",
+          event: eventWithoutPayload
+        }),
+      /event\.payload is required/
+    );
+  });
+
   it("создаёт PENDING entity без сохранения вне вызывающей транзакции", () => {
     const repository = createRepository();
     const store = new PostgresOutboxStore(repository);

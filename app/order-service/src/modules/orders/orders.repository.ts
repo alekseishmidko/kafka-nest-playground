@@ -12,8 +12,7 @@ import {
   type OrderCreatedEvent
 } from "@kafka-playground/contracts";
 import {
-  OutboxEventEntity,
-  OutboxEventStatus
+  createOutboxEventEntity
 } from "@kafka-playground/outbox";
 import { OrderEntity, OrderStatus, type OrderItemSnapshot } from "./entities/order.entity";
 import {
@@ -129,14 +128,11 @@ export class OrdersRepository {
           const event = params.createEvent(savedOrder);
 
           await manager.save(
-            manager.create(OutboxEventEntity, {
+            createOutboxEventEntity({
               topic: EVENT_TOPIC_MAP.OrderCreated,
               messageKey: savedOrder.id,
-              eventType: event.eventType,
-              eventId: event.eventId,
               event,
-              traceContext: captureActiveTraceContext(),
-              status: OutboxEventStatus.Pending
+              traceContext: captureActiveTraceContext()
             })
           );
 
@@ -246,14 +242,11 @@ export class OrdersRepository {
 
       if (finalEvent) {
         await manager.save(
-          manager.create(OutboxEventEntity, {
+          createOutboxEventEntity({
             topic: EVENT_TOPIC_MAP[finalEvent.eventType],
             messageKey: updatedOrder.id,
-            eventType: finalEvent.eventType,
-            eventId: finalEvent.eventId,
             event: finalEvent,
-            traceContext: captureActiveTraceContext(),
-            status: OutboxEventStatus.Pending
+            traceContext: captureActiveTraceContext()
           })
         );
       }

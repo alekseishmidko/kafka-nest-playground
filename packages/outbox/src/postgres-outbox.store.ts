@@ -5,6 +5,7 @@ import {
   OutboxEventEntity,
   OutboxEventStatus
 } from "./outbox-event.entity";
+import { createOutboxEventEntity } from "./create-outbox-event-entity";
 import type {
   CreateOutboxEventParams,
   TransactionalMessageStore
@@ -34,15 +35,7 @@ export class PostgresOutboxStore
    * и намерение отправить событие попадают в БД атомарно.
    */
   createPending(params: CreateOutboxEventParams): OutboxEventEntity {
-    return this.repository.create({
-      topic: params.topic,
-      messageKey: params.messageKey,
-      eventType: params.event.eventType,
-      eventId: params.event.eventId,
-      event: params.event,
-      traceContext: params.traceContext ?? null,
-      status: OutboxEventStatus.Pending
-    });
+    return this.repository.create(createOutboxEventEntity(params));
   }
 
   /**
