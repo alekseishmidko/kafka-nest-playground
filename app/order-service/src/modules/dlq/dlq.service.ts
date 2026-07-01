@@ -18,8 +18,7 @@ import {
   SpanKind
 } from "@kafka-playground/observability";
 import {
-  OutboxEventEntity,
-  OutboxEventStatus,
+  createOutboxEventEntity,
   OutboxPublisherService
 } from "@kafka-playground/outbox";
 import {
@@ -180,14 +179,11 @@ export class DlqService {
       );
 
       await manager.save(
-        manager.create(OutboxEventEntity, {
+        createOutboxEventEntity({
           topic: reprocessed.topic,
           messageKey: entity.messageKey ?? reprocessed.messageKey,
-          eventType: reprocessed.event.eventType,
-          eventId: reprocessed.event.eventId,
           event: reprocessed.event,
-          traceContext: captureActiveTraceContext(),
-          status: OutboxEventStatus.Pending
+          traceContext: captureActiveTraceContext()
         })
       );
 
