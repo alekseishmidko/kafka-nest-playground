@@ -12,6 +12,8 @@ export interface OutboxMigrationOptions {
   primaryKeyConstraintName?: string;
   /** Имя индекса для выборки publishable-записей. */
   publishableIndexName?: string;
+  /** Имя индекса для поиска истекших lease. */
+  leaseIndexName?: string;
 }
 
 /**
@@ -51,6 +53,8 @@ export function createOutboxSchemaQueries(
         "status" "${names.statusEnumName}" not null default 'PENDING',
         "attempts" integer not null default 0,
         "next_attempt_at" timestamptz,
+        "locked_by" varchar(160),
+        "locked_until" timestamptz,
         "published_at" timestamptz,
         "last_error" text,
         "created_at" timestamptz not null default now(),
@@ -62,6 +66,10 @@ export function createOutboxSchemaQueries(
     `
       create index if not exists "${names.publishableIndexName}"
       on "${names.tableName}" ("status", "next_attempt_at", "created_at")
+    `,
+    `
+      create index if not exists "${names.leaseIndexName}"
+      on "${names.tableName}" ("locked_until", "status", "next_attempt_at")
     `
   ];
 }
@@ -79,6 +87,7 @@ export function dropOutboxSchemaQueries(
   const names = resolveNames(options);
 
   return [
+    `drop index if exists "${names.leaseIndexName}"`,
     `drop index if exists "${names.publishableIndexName}"`,
     `drop table if exists "${names.tableName}"`,
     `drop type if exists "${names.statusEnumName}"`
@@ -94,6 +103,7 @@ function resolveNames(options: OutboxMigrationOptions): Required<OutboxMigration
     primaryKeyConstraintName:
       options.primaryKeyConstraintName ?? "PK_outbox_events_id",
     publishableIndexName:
-      options.publishableIndexName ?? "IDX_outbox_events_publishable"
+      options.publishableIndexName ?? "IDX_outbox_events_publishable",
+    leaseIndexName: options.leaseIndexName ?? "IDX_outbox_events_lease"
   };
 }
