@@ -56,6 +56,8 @@ export function createOutboxEventEntity<
   entity.status = OutboxEventStatus.Pending;
   entity.attempts = 0;
   entity.nextAttemptAt = null;
+  entity.lockedBy = null;
+  entity.lockedUntil = null;
   entity.publishedAt = null;
   entity.lastError = null;
 

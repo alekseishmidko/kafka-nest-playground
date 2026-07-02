@@ -13,6 +13,7 @@ import { AddDlqSecurityAudit1718236800000 } from "./migrations/1718236800000-add
 import { AddDlqRetentionIndex1718323200000 } from "./migrations/1718323200000-add-dlq-retention-index";
 import { AddOutboxTraceContext1718409600000 } from "./migrations/1718409600000-add-outbox-trace-context";
 import { CreateKafkaConsumerInbox1718496000000 } from "./migrations/1718496000000-create-kafka-consumer-inbox";
+import { AddOutboxLeaseFields1718582400000 } from "./migrations/1718582400000-add-outbox-lease-fields";
 
 loadServiceEnvFiles(join(process.cwd()));
 
@@ -50,7 +51,8 @@ export function createOrderServiceDataSourceOptions(): DataSourceOptions {
       AddDlqSecurityAudit1718236800000,
       AddDlqRetentionIndex1718323200000,
       AddOutboxTraceContext1718409600000,
-      CreateKafkaConsumerInbox1718496000000
+      CreateKafkaConsumerInbox1718496000000,
+      AddOutboxLeaseFields1718582400000
     ]
   };
 }

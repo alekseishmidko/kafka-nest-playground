@@ -89,6 +89,8 @@ describe("shared outbox package", () => {
     assert.equal(entity.status, OutboxEventStatus.Pending);
     assert.equal(entity.attempts, 0);
     assert.equal(entity.nextAttemptAt, null);
+    assert.equal(entity.lockedBy, null);
+    assert.equal(entity.lockedUntil, null);
     assert.equal(entity.publishedAt, null);
     assert.equal(entity.lastError, null);
   });
@@ -308,10 +310,14 @@ describe("shared outbox package", () => {
       tableName: "billing_outbox_events"
     });
 
-    assert.equal(createQueries.length, 3);
+    assert.equal(createQueries.length, 4);
     assert.match(createQueries[1], /create table if not exists "billing_outbox_events"/);
     assert.match(createQueries[1], /"trace_context" jsonb/);
+    assert.match(createQueries[1], /"locked_by" varchar\(160\)/);
+    assert.match(createQueries[1], /"locked_until" timestamptz/);
+    assert.match(createQueries[3], /"locked_until", "status", "next_attempt_at"/);
     assert.deepEqual(dropQueries, [
+      'drop index if exists "IDX_outbox_events_lease"',
       'drop index if exists "IDX_outbox_events_publishable"',
       'drop table if exists "billing_outbox_events"',
       'drop type if exists "outbox_events_status_enum"'

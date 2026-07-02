@@ -85,6 +85,26 @@ export class OutboxEventEntity<
   @Column({ name: "next_attempt_at", type: "timestamptz", nullable: true })
   nextAttemptAt!: Date | null;
 
+  /**
+   * Идентификатор publisher-инстанса, который временно захватил запись.
+   *
+   * Поле подготавливает outbox к multi-instance publishing: один процесс
+   * получает lease, остальные не должны публиковать эту же запись, пока lease
+   * не истечёт.
+   */
+  @Column({ name: "locked_by", type: "varchar", length: 160, nullable: true })
+  lockedBy!: string | null;
+
+  /**
+   * Время истечения lease.
+   *
+   * Если publisher упал после захвата записи, другой инстанс сможет повторно
+   * забрать запись после `locked_until`. Значение `null` означает, что запись
+   * сейчас никем не захвачена.
+   */
+  @Column({ name: "locked_until", type: "timestamptz", nullable: true })
+  lockedUntil!: Date | null;
+
   /** Фактическое время успешной отправки во внешний transport. */
   @Column({ name: "published_at", type: "timestamptz", nullable: true })
   publishedAt!: Date | null;
