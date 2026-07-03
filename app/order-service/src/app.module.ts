@@ -16,6 +16,7 @@ import { OrdersModule } from "./modules/orders/orders.module";
 import { join } from "node:path";
 import { DlqModule } from "./modules/dlq/dlq.module";
 import { OperationalMetricsModule } from "./modules/operational-metrics/operational-metrics.module";
+import { TechnicalRetentionModule } from "./modules/retention/technical-retention.module";
 
 loadServiceEnvFiles(join(process.cwd()));
 
@@ -63,6 +64,7 @@ loadServiceEnvFiles(join(process.cwd()));
     }),
     OrdersModule,
     DlqModule,
+    TechnicalRetentionModule,
     OperationalMetricsModule
   ]
 })

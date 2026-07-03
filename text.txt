@@ -1,0 +1,13 @@
+Добавить централизованное создание topics/schemas в CI/CD, а не руками через локальные команды.
+•
+Добавить contract compatibility tests для Avro: backward/forward compatibility.
+•
+Добавить retention policy для outbox_events, processed_kafka_events, kafka_consumer_inbox.
+•
+Унести CPU-heavy risk scoring из NestJS worker в Go или worker threads. Сейчас комментарий прямо указывает, что scoring блокирует event loop.
+•
+Добавить rate limits, auth, RBAC и audit для всех admin endpoints, не только DLQ API.
+•
+Добавить Dockerfiles, CI pipeline, security scan, dependency audit, image pinning.
+•
+Покрыть chaos/e2e сценарии: Kafka down, Schema Registry down, Postgres restart, duplicate messages, rebalance during processing, crash after publish before markCompleted.
