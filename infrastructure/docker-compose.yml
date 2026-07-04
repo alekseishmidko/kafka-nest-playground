@@ -50,7 +50,9 @@ services:
       - kafka_playground
 
   kafka-ui:
-    image: provectuslabs/kafka-ui:latest
+    # Закреплённый image tag делает локальную и CI-среду воспроизводимой.
+    # `latest` нельзя использовать: он может изменить поведение без code review.
+    image: provectuslabs/kafka-ui:v0.7.2
     container_name: ${COMPOSE_PROJECT_NAME:-kafka-nest-playground}-kafka-ui
     env_file:
       - .env
@@ -70,7 +72,7 @@ services:
       - kafka_playground
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16.3-alpine3.20
     container_name: ${COMPOSE_PROJECT_NAME:-kafka-nest-playground}-postgres
     env_file:
       - .env
@@ -91,7 +93,7 @@ services:
       - kafka_playground
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.2.5-alpine3.20
     container_name: ${COMPOSE_PROJECT_NAME:-kafka-nest-playground}-redis
     env_file:
       - .env

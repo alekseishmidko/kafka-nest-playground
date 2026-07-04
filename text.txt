@@ -9,4 +9,3 @@
 •
 Добавить Dockerfiles, CI pipeline, security scan, dependency audit, image pinning.
 •
-Покрыть chaos/e2e сценарии: Kafka down, Schema Registry down, Postgres restart, duplicate messages, rebalance during processing, crash after publish before markCompleted.
