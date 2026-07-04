@@ -1,0 +1,170 @@
+name: CI
+
+# Workflow запускается на pull request и push в main, чтобы качество проверялось
+# до merge и повторно на основной ветке.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  # Достаточно read-доступа к репозиторию; workflow не должен иметь лишние права.
+  contents: read
+  # Нужно для security scanners, которые могут публиковать результаты в GitHub.
+  security-events: write
+
+jobs:
+  node:
+    name: Node build, tests and dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Ставим ту же major-версию Node.js, под которую рассчитан проект.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      # pnpm закреплён явно, чтобы CI не зависел от версии Corepack по умолчанию.
+      - name: Enable pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@9.15.4 --activate
+
+      # Frozen lockfile защищает от ситуации, когда package.json обновили,
+      # а pnpm-lock.yaml забыли пересобрать.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # TypeScript lint здесь фактически проверяет типы по workspace-пакетам.
+      - name: Lint
+        run: pnpm lint
+
+      # Build гарантирует, что dist-артефакты могут быть созданы для всех пакетов.
+      - name: Build
+        run: pnpm build
+
+      # Unit tests ловят регрессии до Docker build и security scan.
+      - name: Test
+        run: pnpm test
+
+      # Dependency audit блокирует известные high/critical npm-уязвимости.
+      - name: Dependency audit
+        run: pnpm audit --audit-level high
+
+  go:
+    name: Go tests and vulnerability audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app/risk-service-go
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Go version читается из go.mod, чтобы CI не расходился с сервисом.
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: app/risk-service-go/go.mod
+          cache-dependency-path: app/risk-service-go/go.sum
+
+      # Базовая проверка Go-кода и scorer-логики.
+      - name: Test
+        run: go test ./...
+
+      # govulncheck анализирует Go dependency graph и достижимые уязвимости.
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Vulnerability audit
+        run: govulncheck ./...
+
+  docker:
+    name: Docker build and image security scan
+    runs-on: ubuntu-latest
+    # Docker images сканируем только после успешных language-level проверок.
+    needs:
+      - node
+      - go
+    strategy:
+      fail-fast: false
+      matrix:
+        # Каждый сервис собирается отдельным image. Node-сервисы используют
+        # общий Dockerfile, а Go-сервис — свой multi-stage Dockerfile.
+        include:
+          - image: kafka-playground-gateway-service
+            dockerfile: docker/node-service.Dockerfile
+            context: .
+            build-args: SERVICE_NAME=gateway-service
+          - image: kafka-playground-order-service
+            dockerfile: docker/node-service.Dockerfile
+            context: .
+            build-args: SERVICE_NAME=order-service
+          - image: kafka-playground-risk-service
+            dockerfile: docker/node-service.Dockerfile
+            context: .
+            build-args: SERVICE_NAME=risk-service
+          - image: kafka-playground-payment-service
+            dockerfile: docker/node-service.Dockerfile
+            context: .
+            build-args: SERVICE_NAME=payment-service
+          - image: kafka-playground-notification-service
+            dockerfile: docker/node-service.Dockerfile
+            context: .
+            build-args: SERVICE_NAME=notification-service
+          - image: kafka-playground-risk-service-go
+            dockerfile: app/risk-service-go/Dockerfile
+            context: .
+            build-args: ""
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Buildx нужен для стабильной Docker BuildKit-сборки в GitHub Actions.
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Image не публикуется в registry: job проверяет, что Dockerfile реально
+      # собирается из текущего commit.
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: false
+          tags: ${{ matrix.image }}:${{ github.sha }}
+          build-args: ${{ matrix.build-args }}
+
+      # Trivy проверяет OS packages и application dependencies внутри image.
+      - name: Scan image
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ matrix.image }}:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+
+  config-security:
+    name: IaC and repository security scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Filesystem scan ищет CVE, secrets и небезопасные настройки в IaC/config.
+      - name: Scan filesystem
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,config
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table

@@ -1,0 +1,30 @@
+# Держим Docker build context маленьким и воспроизводимым.
+# Зависимости и build-артефакты пересоздаются внутри image, поэтому локальные
+# копии только замедляют сборку и могут сделать слой нерепрезентативным.
+node_modules/
+dist/
+app/*/node_modules/
+app/*/dist/
+packages/*/node_modules/
+packages/*/dist/
+
+# Локальные env-файлы нельзя запекать в image. Runtime-конфигурация должна
+# приходить из Kubernetes Secrets, Docker Compose env files или secret manager.
+.env
+.env.local
+.env.prod
+app/*/.env
+app/*/.env.local
+app/*/.env.prod
+infrastructure/.env
+
+# Локальные кеши зависят от машины разработчика и часто занимают много места.
+.git/
+.idea/
+.DS_Store
+app/risk-service-go/.gocache/
+app/risk-service-go/.gomodcache/
+
+# CI-отчёты и локальные логи не должны попадать в container layers.
+coverage/
+*.log
