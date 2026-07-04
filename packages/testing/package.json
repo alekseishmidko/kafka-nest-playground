@@ -10,10 +10,15 @@
     "test:e2e:order-pipeline": "node scripts/order-pipeline.e2e.mjs",
     "test:e2e:outbox": "node scripts/outbox-publish.e2e.mjs",
     "test:e2e:outbox-failure": "node scripts/outbox-kafka-failure.e2e.mjs",
+    "test:e2e:schema-registry-outage": "node scripts/schema-registry-outage.e2e.mjs",
+    "test:e2e:postgres-restart": "node scripts/postgres-restart.e2e.mjs",
     "test:e2e:idempotency": "node scripts/order-consumer-idempotency.e2e.mjs",
     "test:e2e:order-lifecycle": "node scripts/order-lifecycle.e2e.mjs",
     "test:e2e:dlq-management": "node scripts/dlq-management.e2e.mjs",
-    "test:e2e:consumer-inbox": "node scripts/consumer-inbox-restart.e2e.mjs"
+    "test:e2e:consumer-inbox": "node scripts/consumer-inbox-restart.e2e.mjs",
+    "test:e2e:consumer-inbox-crash-window": "node scripts/consumer-inbox-crash-window.e2e.mjs",
+    "test:e2e:consumer-inbox-rebalance": "node scripts/consumer-inbox-rebalance-contention.e2e.mjs",
+    "test:e2e:chaos": "pnpm test:e2e:outbox-failure && pnpm test:e2e:schema-registry-outage && pnpm test:e2e:postgres-restart && pnpm test:e2e:idempotency && pnpm test:e2e:consumer-inbox-crash-window && pnpm test:e2e:consumer-inbox-rebalance"
   },
   "dependencies": {
     "@kafkajs/confluent-schema-registry": "^4.1.0",

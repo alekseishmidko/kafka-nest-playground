@@ -314,6 +314,23 @@ export async function waitForSchemaRegistry() {
   }, "Schema Registry to become available");
 }
 
+/**
+ * Ожидает восстановления PostgreSQL после управляемого restart/down сценария.
+ */
+export async function waitForPostgres() {
+  await waitFor(async () => {
+    const client = new Client(e2eConfig.postgres);
+
+    try {
+      await client.connect();
+      await client.query("select 1");
+      return true;
+    } finally {
+      await client.end().catch(() => undefined);
+    }
+  }, "Postgres to become available");
+}
+
 export function json(value) {
   return JSON.stringify(value, null, 2);
 }
