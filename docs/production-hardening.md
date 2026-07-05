@@ -47,6 +47,13 @@ Workflow `.github/workflows/ci.yml` выполняет:
 - Trivy scan Docker images;
 - Trivy filesystem scan для dependencies, secrets и IaC/config issues.
 
+Reusable GitHub Actions (`actions/checkout`, `actions/setup-node`,
+`actions/setup-go`, Docker actions и Trivy action) должны регулярно
+обновляться. Они сами являются Node.js-приложениями, и старые major-версии могут
+запускаться на deprecated runtime GitHub Actions. Если CI показывает warning
+`Node 20 is being deprecated`, правильное решение — обновить action major
+version, а не включать временный `ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION`.
+
 ## Security Scan
 
 Security scan ловит проблемы, которые обычные unit-тесты не видят:
