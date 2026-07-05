@@ -25,6 +25,7 @@
     "test:e2e:order-pipeline": "pnpm --filter @kafka-playground/testing test:e2e:order-pipeline",
     "test:e2e:outbox": "pnpm --filter @kafka-playground/testing test:e2e:outbox",
     "test:e2e:outbox-failure": "pnpm --filter @kafka-playground/testing test:e2e:outbox-failure",
+    "test:e2e:outbox-concurrent-publish": "pnpm --filter @kafka-playground/testing test:e2e:outbox-concurrent-publish",
     "test:e2e:idempotency": "pnpm --filter @kafka-playground/testing test:e2e:idempotency",
     "test:e2e:order-lifecycle": "pnpm --filter @kafka-playground/testing test:e2e:order-lifecycle",
     "test:e2e:dlq-management": "pnpm --filter @kafka-playground/testing test:e2e:dlq-management",
@@ -37,6 +38,10 @@
     "typescript": "^5.7.3"
   },
   "pnpm": {
+    "overrides": {
+      "multer": "^2.2.0",
+      "@opentelemetry/otlp-transformer>protobufjs": "^8.4.1"
+    },
     "patchedDependencies": {
       "kafkajs@2.2.4": "patches/kafkajs@2.2.4.patch"
     }

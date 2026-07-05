@@ -36,7 +36,24 @@ export interface TransactionalMessageStore<
   TMessage extends OutboxEventEntity = OutboxEventEntity
 > {
   createPending(params: CreateOutboxEventParams): TMessage;
-  findPublishable(limit: number): Promise<TMessage[]>;
+  findPublishable(
+    limit: number,
+    options?: {
+      /**
+       * Идентификатор publisher-реплики, которая временно забирает batch.
+       *
+       * Две реплики не должны публиковать одну outbox-запись одновременно:
+       * ownerId записывается в lease-поля и помогает диагностировать, кто
+       * сейчас владеет попыткой публикации.
+       */
+      ownerId: string;
+      /**
+       * Длительность lease. Если publisher упадёт после claim, другая реплика
+       * сможет повторить публикацию после истечения этого времени.
+       */
+      leaseMs: number;
+    }
+  ): Promise<TMessage[]>;
   markPublished(id: string): Promise<void>;
   markFailed(id: string, attempts: number, error: unknown): Promise<void>;
   countByStatuses(): Promise<Record<OutboxEventStatus, number>>;

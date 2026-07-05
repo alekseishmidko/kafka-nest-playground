@@ -3,6 +3,7 @@ import {
   OnApplicationShutdown,
   OnModuleInit
 } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import { KafkaProducerService } from "@kafka-playground/kafka";
 import {
   ApplicationMetrics,
@@ -39,6 +40,10 @@ export class OutboxPublisherService
   private readonly intervalMs = 1000;
   /** Максимум событий за один проход, чтобы publisher не монополизировал процесс. */
   private readonly batchSize = 25;
+  /** Lease защищает от одновременной публикации одной строки разными репликами. */
+  private readonly leaseMs = 30_000;
+  /** Уникальный id текущей реплики publisher-а для outbox lease diagnostics. */
+  private readonly ownerId = `outbox-publisher-${process.pid}-${randomUUID()}`;
   private timer: NodeJS.Timeout | null = null;
   /** Защита от наложения двух publish-циклов внутри одного Node.js процесса. */
   private isPublishing = false;
@@ -83,6 +88,8 @@ export class OutboxPublisherService
       logger: this.logger,
       metrics: this.metrics,
       batchSize: this.batchSize,
+      ownerId: this.ownerId,
+      leaseMs: this.leaseMs,
       isPublishing: () => this.isPublishing,
       setPublishing: (value) => {
         this.isPublishing = value;
@@ -103,6 +110,8 @@ export async function publishOutboxBatch(params: {
   logger: Pick<PinoLogger, "info" | "warn">;
   metrics?: Pick<ApplicationMetrics, "recordOutboxPublish">;
   batchSize: number;
+  ownerId?: string;
+  leaseMs?: number;
   isPublishing(): boolean;
   setPublishing(value: boolean): void;
 }): Promise<void> {
@@ -113,7 +122,15 @@ export async function publishOutboxBatch(params: {
   params.setPublishing(true);
 
   try {
-    const events = await params.store.findPublishable(params.batchSize);
+    const events = await params.store.findPublishable(
+      params.batchSize,
+      params.ownerId && params.leaseMs
+        ? {
+            ownerId: params.ownerId,
+            leaseMs: params.leaseMs
+          }
+        : undefined
+    );
 
     for (const outboxEvent of events) {
       const parentContext = extractTraceContext(outboxEvent.traceContext);

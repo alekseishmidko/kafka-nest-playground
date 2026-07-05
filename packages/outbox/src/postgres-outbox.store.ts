@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { LessThanOrEqual, Repository } from "typeorm";
+import { Repository } from "typeorm";
 import {
   OutboxEventEntity,
   OutboxEventStatus
@@ -39,28 +39,69 @@ export class PostgresOutboxStore
   }
 
   /**
-   * Возвращает события, которые можно публиковать прямо сейчас.
+   * Атомарно забирает события, которые можно публиковать прямо сейчас.
    *
    * В выборку попадают новые `PENDING` события и `FAILED` события, у которых
-   * уже прошёл `nextAttemptAt`. Для нескольких publisher-инстансов в будущем
-   * стоит заменить этот метод на lease или `FOR UPDATE SKIP LOCKED`.
+   * уже прошёл `nextAttemptAt`. `FOR UPDATE SKIP LOCKED` нужен для нескольких
+   * publisher-реплик: первая транзакция блокирует и помечает строки lease-ом,
+   * остальные реплики пропускают эти строки и не публикуют тот же event.
    */
-  async findPublishable(limit: number): Promise<OutboxEventEntity[]> {
-    const now = new Date();
+  async findPublishable(
+    limit: number,
+    options: {
+      ownerId: string;
+      leaseMs: number;
+    } = {
+      ownerId: "outbox-publisher",
+      leaseMs: 30_000
+    }
+  ): Promise<OutboxEventEntity[]> {
+    const rows = await this.repository.manager.query(
+      `
+        with candidates as (
+          select id
+          from outbox_events
+          where (
+              status = 'PENDING'
+              or (
+                status = 'FAILED'
+                and (next_attempt_at is null or next_attempt_at <= now())
+              )
+            )
+            and (locked_until is null or locked_until <= now())
+          order by created_at asc, id asc
+          limit $1
+          for update skip locked
+        )
+        update outbox_events outbox
+        set
+          locked_by = $2,
+          locked_until = now() + ($3::text || ' milliseconds')::interval,
+          updated_at = now()
+        from candidates
+        where outbox.id = candidates.id
+        returning
+          outbox.id,
+          outbox.topic,
+          outbox.message_key as "messageKey",
+          outbox.event_type as "eventType",
+          outbox.event_id as "eventId",
+          outbox.event,
+          outbox.trace_context as "traceContext",
+          outbox.status,
+          outbox.attempts,
+          outbox.next_attempt_at as "nextAttemptAt",
+          outbox.locked_by as "lockedBy",
+          outbox.locked_until as "lockedUntil",
+          outbox.published_at as "publishedAt",
+          outbox.last_error as "lastError",
+          outbox.created_at as "createdAt",
+          outbox.updated_at as "updatedAt"
+      `,
+      [limit, options.ownerId, options.leaseMs]
+    );
 
-    return this.repository.find({
-      where: [
-        { status: OutboxEventStatus.Pending },
-        {
-          status: OutboxEventStatus.Failed,
-          nextAttemptAt: LessThanOrEqual(now)
-        }
-      ],
-      order: {
-        createdAt: "ASC"
-      },
-      take: limit
-    });
+    return rows as OutboxEventEntity[];
   }
 
   /**
@@ -72,7 +113,9 @@ export class PostgresOutboxStore
       {
         status: OutboxEventStatus.Published,
         publishedAt: new Date(),
-        lastError: null
+        lastError: null,
+        lockedBy: null,
+        lockedUntil: null
       }
     );
   }
@@ -87,7 +130,9 @@ export class PostgresOutboxStore
         status: OutboxEventStatus.Failed,
         attempts,
         nextAttemptAt: nextAttemptAt(attempts),
-        lastError: normalizeError(error)
+        lastError: normalizeError(error),
+        lockedBy: null,
+        lockedUntil: null
       }
     );
   }
