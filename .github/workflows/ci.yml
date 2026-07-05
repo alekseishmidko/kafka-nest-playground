@@ -30,9 +30,10 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: "22"
-          cache: pnpm
 
       # pnpm закреплён явно, чтобы CI не зависел от версии Corepack по умолчанию.
+      # Важно: встроенный pnpm-cache setup-node здесь не включаем, потому что
+      # action ищет executable `pnpm` раньше, чем Corepack подготовит его в PATH.
       - name: Enable pinned pnpm
         run: |
           corepack enable
