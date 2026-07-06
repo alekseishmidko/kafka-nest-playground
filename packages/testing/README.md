@@ -37,6 +37,117 @@ E2E_POSTGRES_DB=kafka_playground \
 pnpm test:e2e:order-pipeline
 ```
 
+## Order Pipeline Load Test
+
+Нагрузочный тест отвечает на вопрос: сколько заказов в секунду выдерживает
+синхронная часть публичного API до роста latency и ошибок.
+
+Сценарий находится в:
+
+```text
+packages/testing/load/order-pipeline.k6.js
+```
+
+Он выполняет `POST /orders` через gateway и измеряет:
+
+- `http_req_duration` для `POST /orders`;
+- `http_req_failed`;
+- custom metric `order_create_errors`;
+- custom metric `order_create_latency`;
+- custom counter `orders_created`.
+
+Важно: k6 измеряет только синхронный путь HTTP-запроса:
+
+```text
+client -> gateway-service -> gRPC order-service
+       -> PostgreSQL transaction -> outbox insert -> HTTP response
+```
+
+Асинхронный хвост pipeline нужно смотреть в Grafana/Prometheus:
+
+- `outbox_events{status="PENDING"|"FAILED"}`;
+- Kafka consumer lag;
+- retry rate;
+- DLQ backlog;
+- p95 Kafka handler duration;
+- PostgreSQL CPU/connections/locks;
+- Node.js event loop lag и memory.
+
+### Установка k6
+
+k6 используется как внешний CLI-инструмент, а не npm-зависимость.
+
+```bash
+brew install k6
+```
+
+Для Linux используйте инструкцию из документации Grafana k6:
+
+```text
+https://grafana.com/docs/k6/latest/set-up/install-k6/
+```
+
+### Запуск
+
+Smoke-проверка на малой нагрузке:
+
+```bash
+pnpm test:load:smoke
+```
+
+Обычный ступенчатый load test:
+
+```bash
+pnpm test:load:order-pipeline
+```
+
+Более агрессивный stress profile:
+
+```bash
+pnpm test:load:stress
+```
+
+Перед запуском нужны:
+
+- `pnpm infra:up`;
+- `pnpm contracts:schemas:register`;
+- `pnpm --filter order-service migration:run`;
+- запущенные `gateway-service`, `order-service`, `risk-service` или
+  `risk-service-go`, `payment-service`, `notification-service`.
+
+### Настройки
+
+```env
+LOAD_GATEWAY_URL=http://localhost:3000
+LOAD_PROFILE=smoke|load|stress
+LOAD_HTTP_P95_THRESHOLD_MS=500
+LOAD_HTTP_P99_THRESHOLD_MS=1000
+LOAD_HTTP_ERROR_RATE_THRESHOLD=0.01
+LOAD_ORDER_ERROR_RATE_THRESHOLD=0.01
+LOAD_PRE_ALLOCATED_VUS=50
+LOAD_MAX_VUS=200
+LOAD_STAGE_1_RPS=10
+LOAD_STAGE_2_RPS=25
+LOAD_STAGE_3_RPS=50
+LOAD_STAGE_4_RPS=100
+```
+
+Пример:
+
+```bash
+LOAD_GATEWAY_URL=http://localhost:3000 \
+LOAD_STAGE_4_RPS=150 \
+LOAD_HTTP_P95_THRESHOLD_MS=700 \
+pnpm test:load:order-pipeline
+```
+
+### Как читать результат
+
+Если k6 thresholds прошли, но в Grafana растёт outbox backlog или Kafka lag,
+значит HTTP API принимает заказы быстрее, чем асинхронные workers их
+обрабатывают. Это не видно только по HTTP latency, поэтому load test всегда
+нужно смотреть вместе с operational metrics.
+
 ## Transactional Outbox E2E
 
 Happy-path проверка создаёт заказ и подтверждает три независимых факта:
