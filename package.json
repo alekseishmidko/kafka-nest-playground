@@ -30,6 +30,9 @@
     "test:e2e:order-lifecycle": "pnpm --filter @kafka-playground/testing test:e2e:order-lifecycle",
     "test:e2e:dlq-management": "pnpm --filter @kafka-playground/testing test:e2e:dlq-management",
     "test:e2e:consumer-inbox": "pnpm --filter @kafka-playground/testing test:e2e:consumer-inbox",
+    "test:load:order-pipeline": "pnpm --filter @kafka-playground/testing test:load:order-pipeline",
+    "test:load:smoke": "pnpm --filter @kafka-playground/testing test:load:smoke",
+    "test:load:stress": "pnpm --filter @kafka-playground/testing test:load:stress",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test"
