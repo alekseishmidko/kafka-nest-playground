@@ -9,7 +9,7 @@
 - Node.js 22+
 - pnpm 9
 - Docker Compose
-- Go 1.24+ для `risk-service-go`
+- Go 1.25.11+ для `risk-service-go`
 
 Grafana и `gateway-service` по умолчанию используют порт `3000`. Для одновременного
 запуска задайте в `infrastructure/.env`:

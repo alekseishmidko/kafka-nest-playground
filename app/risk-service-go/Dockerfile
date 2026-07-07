@@ -5,8 +5,11 @@
 # - runtime image содержит только скомпилированный binary и CA certificates.
 # Так image получается меньше, а build tools не попадают в production runtime.
 
-ARG GO_IMAGE=golang:1.24-alpine3.21
-ARG ALPINE_IMAGE=alpine:3.21.3
+# Builder image должен быть на той же безопасной Go patch-версии, что и go.mod:
+# govulncheck проверяет уязвимости стандартной библиотеки именно той версии Go,
+# которой собирается binary.
+ARG GO_IMAGE=golang:1.25.11-alpine3.22
+ARG ALPINE_IMAGE=alpine:3.22.1
 
 FROM ${GO_IMAGE} AS build
 
@@ -24,7 +27,10 @@ FROM ${ALPINE_IMAGE} AS runtime
 
 # Создаём отдельного non-root пользователя: сервису не нужны root-права внутри
 # контейнера, а это уменьшает blast radius при компрометации процесса.
+# `apk upgrade` подтягивает security fixes для пакетов из base image
+# (например openssl, musl, zlib), чтобы Trivy не видел уже исправленные CVE.
 RUN addgroup -S app && adduser -S -G app app \
+  && apk upgrade --no-cache \
   && apk add --no-cache ca-certificates
 
 WORKDIR /app

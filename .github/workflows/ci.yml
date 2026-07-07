@@ -82,13 +82,12 @@ jobs:
       - name: Test
         run: go test ./...
 
-      # govulncheck анализирует Go dependency graph и достижимые уязвимости.
-      # Версию инструмента закрепляем явно: `@latest` и новые релизы govulncheck
-      # могут начать требовать более новый Go, чем указано в go.mod проекта, и
-      # сломать CI без изменений в коде сервиса. v1.1.4 объявляет go 1.22 и
-      # совместим с текущим Go 1.24; обновлять этот pin нужно вместе с Go toolchain.
+      # govulncheck анализирует Go dependency graph, достижимые уязвимости и
+      # стандартную библиотеку той Go-версии, которой собирается сервис.
+      # Версию инструмента закрепляем явно: `@latest` может неожиданно изменить
+      # требования к toolchain. Этот pin обновляется вместе с Go toolchain.
       - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.5.0
 
       - name: Vulnerability audit
         run: govulncheck ./...
@@ -140,13 +139,15 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       # Image не публикуется в registry: job проверяет, что Dockerfile реально
-      # собирается из текущего commit.
+      # собирается из текущего commit. `load: true` загружает результат сборки в
+      # локальный Docker daemon runner-а, иначе Trivy не сможет найти image по tag.
       - name: Build image
         uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           push: false
+          load: true
           tags: ${{ matrix.image }}:${{ github.sha }}
           build-args: ${{ matrix.build-args }}
 
