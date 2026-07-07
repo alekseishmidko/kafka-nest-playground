@@ -83,8 +83,12 @@ jobs:
         run: go test ./...
 
       # govulncheck анализирует Go dependency graph и достижимые уязвимости.
+      # Версию инструмента закрепляем явно: `@latest` и новые релизы govulncheck
+      # могут начать требовать более новый Go, чем указано в go.mod проекта, и
+      # сломать CI без изменений в коде сервиса. v1.1.4 объявляет go 1.22 и
+      # совместим с текущим Go 1.24; обновлять этот pin нужно вместе с Go toolchain.
       - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
 
       - name: Vulnerability audit
         run: govulncheck ./...
@@ -148,7 +152,7 @@ jobs:
 
       # Trivy проверяет OS packages и application dependencies внутри image.
       - name: Scan image
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ matrix.image }}:${{ github.sha }}
           severity: HIGH,CRITICAL
@@ -166,7 +170,7 @@ jobs:
 
       # Filesystem scan ищет CVE, secrets и небезопасные настройки в IaC/config.
       - name: Scan filesystem
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
