@@ -131,6 +131,46 @@ pnpm test:load:order-pipeline
 pnpm test:load:stress
 ```
 
+### Сохранённый baseline
+
+Baseline фиксирует не только k6-результат, а полный operational snapshot:
+
+- RPS;
+- p95/p99 latency;
+- error rate;
+- Kafka consumer lag;
+- outbox/DLQ backlog;
+- Node.js CPU/RAM по Prometheus;
+- PostgreSQL connections по `pg_stat_activity`.
+
+Создать или обновить локальный эталон:
+
+```bash
+pnpm test:load:baseline
+```
+
+Эталон сохраняется в:
+
+```text
+packages/testing/baselines/order-pipeline.local.json
+```
+
+Полный timestamp-отчёт каждого прогона сохраняется в:
+
+```text
+packages/testing/reports/load-baseline/
+```
+
+Сравнить текущий прогон с сохранённым эталоном:
+
+```bash
+pnpm test:load:compare
+```
+
+После оптимизации смотрите не только “RPS вырос”, а весь набор метрик. Плохой
+результат: RPS вырос, но p99, Kafka lag, outbox backlog или Postgres connections
+растут быстрее, чем ожидалось.
+
 Перед запуском нужны:
 
 - `pnpm infra:up`;
@@ -154,6 +194,10 @@ LOAD_STAGE_1_RPS=10
 LOAD_STAGE_2_RPS=25
 LOAD_STAGE_3_RPS=50
 LOAD_STAGE_4_RPS=100
+LOAD_BASELINE_RPS=25
+LOAD_BASELINE_DURATION=5m
+LOAD_PROMETHEUS_URL=http://localhost:9090
+LOAD_POSTGRES_SAMPLE_INTERVAL_MS=5000
 ```
 
 Пример:
@@ -171,6 +215,33 @@ pnpm test:load:order-pipeline
 значит HTTP API принимает заказы быстрее, чем асинхронные workers их
 обрабатывают. Это не видно только по HTTP latency, поэтому load test всегда
 нужно смотреть вместе с operational metrics.
+
+## Local Developer Experience
+
+Новый разработчик может поднять инфраструктуру и подготовить локальное окружение
+одной командой:
+
+```bash
+pnpm setup:local
+```
+
+Команда выполняет:
+
+- `pnpm install`;
+- `pnpm infra:up`;
+- `pnpm contracts:schemas:register`;
+- `pnpm --filter order-service migration:run`.
+
+Проверить локальный стенд production-like flow:
+
+```bash
+pnpm verify:local
+```
+
+Команда сама стартует `gateway`, `order`, `risk`, `payment` и `notification`
+dev-сервисы, ждёт их readiness endpoints, запускает production e2e gate и затем
+останавливает дочерние процессы. Логи сервисов остаются в stdout команды, чтобы
+ошибку можно было видеть без ручного поиска по нескольким терминалам.
 
 ## Transactional Outbox E2E
 

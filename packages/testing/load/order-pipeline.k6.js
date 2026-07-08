@@ -100,6 +100,22 @@ function buildOptions(selectedProfile) {
     };
   }
 
+  if (selectedProfile === "baseline") {
+    return {
+      scenarios: {
+        baseline: {
+          executor: "constant-arrival-rate",
+          rate: Number(readEnv("LOAD_BASELINE_RPS", "25")),
+          timeUnit: "1s",
+          duration: readEnv("LOAD_BASELINE_DURATION", "5m"),
+          preAllocatedVUs: Number(readEnv("LOAD_PRE_ALLOCATED_VUS", "50")),
+          maxVUs: Number(readEnv("LOAD_MAX_VUS", "200"))
+        }
+      },
+      thresholds
+    };
+  }
+
   return {
     scenarios: {
       load: {
