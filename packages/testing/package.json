@@ -7,6 +7,7 @@
     "build": "echo \"No build configured\"",
     "lint": "echo \"No lint configured\"",
     "test": "echo \"No tests configured\"",
+    "test:e2e:gate": "pnpm --filter @kafka-playground/outbox build && node scripts/production-gate.e2e.mjs && node scripts/order-consumer-idempotency.e2e.mjs && pnpm test:e2e:outbox-concurrent-publish",
     "test:e2e:order-pipeline": "node scripts/order-pipeline.e2e.mjs",
     "test:e2e:outbox": "node scripts/outbox-publish.e2e.mjs",
     "test:e2e:outbox-failure": "node scripts/outbox-kafka-failure.e2e.mjs",

@@ -7,10 +7,7 @@
 •
 Добавить rate limits, auth, RBAC и audit для всех admin endpoints, не только DLQ API.
 
-Приоритет 1
-1.
-Довести CI до зеленого состояния
-Сейчас уже всплыли проблемы с govulncheck, Trivy, Node runtime, pnpm. Нужно прогнать весь workflow до конца и убрать все оставшиеся падения: audit, Docker build, Trivy scan, Go vuln scan.
+
 2.
 Зафиксировать runtime matrix
 В одном месте описать:
@@ -25,32 +22,12 @@ Docker image tags
 ◦
 версии GitHub Actions
 И дальше не использовать @latest в CI.
-3.
-Принять решение по Go версии
-Если govulncheck начнет ругаться на standard library CVE, лучше обновить Go patch/minor, например с 1.24.x на актуальный безопасный 1.24.x или перейти на следующий supported minor. Не надо просто отключать audit.
+
 Приоритет 2
 4.
 Сделать smoke/prod-like compose
 Отдельный docker-compose.ci.yml или docker-compose.prod-like.yml, где сервисы запускаются из Docker images, а не через dev-команды. Это покажет, что проект реально деплоится как набор контейнеров.
-5.
-Добавить обязательный e2e gate
-Минимум:
-◦
-create order
-◦
-Kafka event produced
-◦
-risk processed
-◦
-payment processed
-◦
-order status changed
-◦
-notification consumed
-◦
-duplicate message не ломает состояние
-◦
-outbox не публикует одну запись двумя publisher-репликами
+
 6.
 Добавить нагрузочный baseline
 Не просто k6-скрипт, а сохраненный эталон:
@@ -66,21 +43,7 @@ Kafka consumer lag
 CPU/RAM/Postgres connections
 Потом каждую оптимизацию сравнивать с baseline.
 Приоритет 3
-7.
-Ввести ADR-документы
-Для ключевых решений:
-◦
-почему outbox
-◦
-почему inbox
-◦
-почему Kafka key = orderId
-◦
-почему Go risk-service или worker threads
-◦
-как работает retry/DLQ
-◦
-как обновляются Avro contracts
+
 8.
 Улучшить developer experience
 Один сценарий “поднять все и проверить”:
