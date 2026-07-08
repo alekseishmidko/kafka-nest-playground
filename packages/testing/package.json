@@ -22,6 +22,8 @@
     "test:e2e:consumer-inbox-rebalance": "node scripts/consumer-inbox-rebalance-contention.e2e.mjs",
     "test:e2e:chaos": "pnpm test:e2e:outbox-failure && pnpm test:e2e:outbox-concurrent-publish && pnpm test:e2e:schema-registry-outage && pnpm test:e2e:postgres-restart && pnpm test:e2e:idempotency && pnpm test:e2e:consumer-inbox-crash-window && pnpm test:e2e:consumer-inbox-rebalance",
     "test:load:order-pipeline": "node scripts/run-k6-load.mjs load",
+    "test:load:baseline": "node scripts/load-baseline.mjs capture",
+    "test:load:compare": "node scripts/load-baseline.mjs compare",
     "test:load:smoke": "node scripts/run-k6-load.mjs smoke",
     "test:load:stress": "node scripts/run-k6-load.mjs stress"
   },

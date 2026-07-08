@@ -28,21 +28,6 @@ Docker image tags
 Сделать smoke/prod-like compose
 Отдельный docker-compose.ci.yml или docker-compose.prod-like.yml, где сервисы запускаются из Docker images, а не через dev-команды. Это покажет, что проект реально деплоится как набор контейнеров.
 
-6.
-Добавить нагрузочный baseline
-Не просто k6-скрипт, а сохраненный эталон:
-◦
-сколько RPS держит локальный стенд
-◦
-p95/p99 latency
-◦
-error rate
-◦
-Kafka consumer lag
-◦
-CPU/RAM/Postgres connections
-Потом каждую оптимизацию сравнивать с baseline.
-Приоритет 3
 
 8.
 Улучшить developer experience

@@ -1,0 +1,29 @@
+{
+  "capturedAt": "replace by running pnpm test:load:baseline",
+  "scenario": "order-pipeline",
+  "profile": "baseline",
+  "k6": {
+    "rps": null,
+    "p95LatencyMs": null,
+    "p99LatencyMs": null,
+    "errorRate": null
+  },
+  "kafka": {
+    "maxConsumerLag": {
+      "value": null
+    }
+  },
+  "resources": {
+    "maxNodeCpuCores": {
+      "value": null
+    },
+    "maxNodeResidentMemoryBytes": {
+      "value": null
+    },
+    "postgresConnections": {
+      "maxTotal": null,
+      "maxActive": null,
+      "maxIdle": null
+    }
+  }
+}
