@@ -8,7 +8,7 @@
 # Builder image должен быть на той же безопасной Go patch-версии, что и go.mod:
 # govulncheck проверяет уязвимости стандартной библиотеки именно той версии Go,
 # которой собирается binary.
-ARG GO_IMAGE=golang:1.25.11-alpine3.22
+ARG GO_IMAGE=golang:1.25.12-bookworm
 ARG ALPINE_IMAGE=alpine:3.22.1
 
 FROM ${GO_IMAGE} AS build

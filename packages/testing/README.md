@@ -18,6 +18,30 @@ Smoke-test for the full `order -> risk -> payment -> order` flow:
 pnpm test:e2e:order-pipeline
 ```
 
+## Production E2E Gate
+
+Обязательный production-like gate для полного order flow:
+
+```bash
+pnpm test:e2e:gate
+```
+
+Gate проверяет:
+
+- создание заказа через Gateway API;
+- публикацию `OrderCreated` в Kafka;
+- обработку risk-service;
+- обработку payment-service;
+- переход заказа в терминальный статус;
+- consumption финального order event в `notification-service`;
+- идемпотентность duplicate message;
+- защиту outbox от одновременной публикации одной записи двумя publisher-репликами.
+
+Перед запуском gate нужен чистый pending outbox. Если в `outbox_events`
+остался старый backlog, gate падает до создания заказа: outbox publisher
+обрабатывает записи oldest-first, поэтому старые `PENDING` события могут скрыть
+реальное состояние нового flow.
+
 Prerequisites:
 
 - infrastructure is running: `pnpm infra:up`

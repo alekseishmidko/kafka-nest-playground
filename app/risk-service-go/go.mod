@@ -1,6 +1,6 @@
 module github.com/kafka-playground/risk-service-go
 
-go 1.25.11
+go 1.25.12
 
 require (
 	github.com/google/uuid v1.6.0
