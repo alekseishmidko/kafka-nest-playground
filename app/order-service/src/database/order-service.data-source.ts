@@ -9,12 +9,15 @@ import { AddFinalOrderStatuses1718064000000 } from "./migrations/1718064000000-a
 import { CreateDeadLetterEvents1718150400000 } from "./migrations/1718150400000-create-dead-letter-events";
 import { DeadLetterEventEntity } from "../modules/dlq/entities/dead-letter-event.entity";
 import { DlqAuditLogEntity } from "../modules/dlq/entities/dlq-audit-log.entity";
+import { AdminAuditEventEntity } from "../modules/admin-audit/entities/admin-audit-event.entity";
 import { AddDlqSecurityAudit1718236800000 } from "./migrations/1718236800000-add-dlq-security-audit";
 import { AddDlqRetentionIndex1718323200000 } from "./migrations/1718323200000-add-dlq-retention-index";
 import { AddOutboxTraceContext1718409600000 } from "./migrations/1718409600000-add-outbox-trace-context";
 import { CreateKafkaConsumerInbox1718496000000 } from "./migrations/1718496000000-create-kafka-consumer-inbox";
 import { AddOutboxLeaseFields1718582400000 } from "./migrations/1718582400000-add-outbox-lease-fields";
 import { AddTechnicalRetentionIndexes1718668800000 } from "./migrations/1718668800000-add-technical-retention-indexes";
+import { CreateAdminAuditEvents1718755200000 } from "./migrations/1718755200000-create-admin-audit-events";
+import { AddOutboxIgnoredStatus1718841600000 } from "./migrations/1718841600000-add-outbox-ignored-status";
 
 loadServiceEnvFiles(join(process.cwd()));
 
@@ -43,7 +46,8 @@ export function createOrderServiceDataSourceOptions(): DataSourceOptions {
       OutboxEventEntity,
       ProcessedKafkaEventEntity,
       DeadLetterEventEntity,
-      DlqAuditLogEntity
+      DlqAuditLogEntity,
+      AdminAuditEventEntity
     ],
     migrations: [
       CreateOrderServiceSchema1717977600000,
@@ -54,7 +58,9 @@ export function createOrderServiceDataSourceOptions(): DataSourceOptions {
       AddOutboxTraceContext1718409600000,
       CreateKafkaConsumerInbox1718496000000,
       AddOutboxLeaseFields1718582400000,
-      AddTechnicalRetentionIndexes1718668800000
+      AddTechnicalRetentionIndexes1718668800000,
+      CreateAdminAuditEvents1718755200000,
+      AddOutboxIgnoredStatus1718841600000
     ]
   };
 }

@@ -5,7 +5,7 @@
 •
 Унести CPU-heavy risk scoring из NestJS worker в Go или worker threads. Сейчас комментарий прямо указывает, что scoring блокирует event loop.
 •
-Добавить rate limits, auth, RBAC и audit для всех admin endpoints, не только DLQ API.
+Добавить rate limits, auth, RBAC  не только DLQ API.
 
 
 2.
@@ -29,12 +29,7 @@ Docker image tags
 Отдельный docker-compose.ci.yml или docker-compose.prod-like.yml, где сервисы запускаются из Docker images, а не через dev-команды. Это покажет, что проект реально деплоится как набор контейнеров.
 
 
-8.
-Улучшить developer experience
-Один сценарий “поднять все и проверить”:
-pnpm setup:local
-pnpm verify:local
-Чтобы новый разработчик не собирал шаги из README вручную.
+
 9.
 Подготовить feature boundaries
 Перед добавлением новых ресурсов лучше явно выделить bounded contexts:
@@ -54,3 +49,132 @@ users/customers
 audit/admin
 Что я бы сделал следующим конкретным шагом
 Я бы добавил prod-like проверку: сборка Docker images, запуск инфраструктуры и сервисов из контейнеров, затем один smoke/e2e сценарий через Gateway API. Это даст уверенность, что проект не только работает в dev-режиме, но и готов к реальному деплою.
+
+
+Я бы развивал проект не “фичами ради фич”, а как production-grade Kafka platform playground. Приоритеты такие.
+1. Общая admin security Ты уже начал audit. Дальше логично довести весь /admin/* слой:
+auth
+RBAC
+rate limits
+audit
+Сделать общий AdminSecurityModule, а не DLQ-specific guards. Потом все будущие admin endpoints будут защищены по умолчанию.
+2. Admin API для outbox Сейчас outbox есть как инфраструктурный механизм, но управлять им руками сложно. Полезные endpoints:
+GET  /admin/outbox?status=FAILED
+GET  /admin/outbox/:id
+POST /admin/outbox/:id/retry
+POST /admin/outbox/retry-failed
+POST /admin/outbox/:id/ignore
+Это даст реальный production-инструмент: видеть stuck events, retry failed events, расследовать publish проблемы.
+3. Admin API для inbox/idempotency Для kafka_consumer_inbox можно добавить read-only endpoints:
+GET /admin/inbox?consumer=payment-service&status=COMPLETED
+GET /admin/inbox/:id
+И осторожные maintenance actions:
+POST /admin/inbox/:id/retry
+POST /admin/inbox/cleanup-preview
+Важно: любые destructive actions только с audit/RBAC.
+4. Общий rate limit для /admin/* Сейчас rate limit есть только у DLQ. Лучше вынести:
+AdminRateLimitGuard
+@AdminRateLimit("read" | "write" | "dangerous")
+Пример:
+read: 120/min
+write: 30/min
+dangerous: 5/min
+5. Baseline + performance regression gate Ты уже добавил load baseline. Следующий шаг: comparison gate.
+Например:
+pnpm test:load:compare
+должен падать, если:
+p95 latency выросла > 20%
+p99 latency выросла > 30%
+error rate > 1%
+Kafka lag не вернулся к baseline
+outbox backlog остался > 0
+6. Observability dashboards as code Добавить Grafana dashboards в репозиторий:
+infrastructure/grafana/dashboards/order-pipeline.json
+infrastructure/grafana/dashboards/kafka-workers.json
+infrastructure/grafana/dashboards/outbox-dlq.json
+Панели:
+RPS
+p95/p99
+Kafka lag
+outbox pending/failed
+DLQ NEW
+retry rate
+consumer processing duration
+Node.js memory/event loop
+Postgres connections
+7. Contract compatibility tests Для Avro добавить отдельный gate:
+pnpm test:contracts:compatibility
+Он должен проверять, что новые schemas backward-compatible с уже зарегистрированными версиями в Schema Registry.
+Это очень важный production-навык для Kafka-проектов.
+8. Replay tooling Добавить безопасный replay:
+POST /admin/dlq/:id/reprocess
+POST /admin/outbox/:id/replay
+POST /admin/kafka/replay-range
+Но replay range должен быть очень осторожным:
+dryRun
+limit
+topic
+partition
+offsetFrom
+offsetTo
+reason
+audit required
+dangerous permission
+9. Chaos tests в CI nightly Не все chaos/e2e надо гонять на каждый PR. Лучше:
+PR:
+  build
+  unit
+  contract
+  smoke e2e
+
+nightly:
+  chaos
+  load smoke
+  Trivy
+  govulncheck
+  dependency audit
+Так CI не станет слишком медленным.
+10. Failure simulation endpoints Для обучения и тестов можно добавить controlled failure flags:
+POST /admin/faults/risk-service
+POST /admin/faults/payment-service
+POST /admin/faults/order-consumer
+Например:
+{
+  "mode": "fail-next-n-events",
+  "count": 5,
+  "errorCode": "PAYMENT_PROVIDER_TIMEOUT"
+}
+Это удобно для проверки retry/DLQ без ручного ломания Kafka/Postgres.
+11. Idempotency visualization Добавить read model/endpoint:
+GET /admin/orders/:id/timeline
+Возвращать:
+order created
+outbox event created
+Kafka event published
+risk consumed
+payment consumed
+order status changed
+notification consumed
+duplicates ignored
+DLQ/retry if any
+Это будет очень сильная учебная и production-debug фича.
+12. Multi-instance local profile Сделать сценарий:
+pnpm verify:local:ha
+Он поднимает:
+2 order-service instances
+2 outbox publishers
+2 payment consumers
+2 notification consumers
+И проверяет:
+нет двойной публикации outbox
+consumer rebalance не ломает processing
+duplicates не меняют состояние
+lag возвращается к 0
+Если выбирать ближайшие задачи, я бы делал в таком порядке:
+1. Общий AdminSecurityModule: auth + RBAC + rate limit + audit
+2. Admin Outbox API
+3. Order timeline endpoint
+4. Grafana dashboards as code
+5. Contract compatibility tests
+6. Performance regression gate
+Самая полезная следующая фича для твоего текущего состояния: Admin Outbox API, потому что outbox уже центральный механизм надёжности, но пока им нельзя удобно управлять и расследовать проблемы.

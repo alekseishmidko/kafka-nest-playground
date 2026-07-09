@@ -228,6 +228,79 @@ X-Admin-Api-Key: <operator-key>
 Причина обязательна, должна содержать от 5 до 1000 символов и сохраняется в
 DLQ-записи и неизменяемой таблице `dlq_audit_log`.
 
+### Outbox Admin API
+
+Outbox endpoints используют те же `X-Admin-Api-Key`, роли, rate limit и общий
+`admin_audit_events`, что и DLQ endpoints.
+
+Посмотреть stuck/failed события:
+
+```http
+GET /admin/outbox?status=FAILED&limit=50&offset=0
+X-Admin-Api-Key: <viewer-or-operator-key>
+```
+
+Посмотреть одну запись:
+
+```http
+GET /admin/outbox/{id}
+X-Admin-Api-Key: <viewer-or-operator-key>
+```
+
+Повторить одну `FAILED` запись прямо сейчас:
+
+```http
+POST /admin/outbox/{id}/retry
+X-Admin-Api-Key: <operator-key>
+```
+
+Команда не публикует событие напрямую. Она снимает `next_attempt_at` и lease,
+после чего обычный `OutboxPublisherService` забирает запись тем же путём, что и
+автоматический retry. Это сохраняет единую delivery logic.
+
+Повторить пачку `FAILED` записей:
+
+```http
+POST /admin/outbox/retry-failed?limit=100
+X-Admin-Api-Key: <operator-key>
+```
+
+Исключить запись из публикации после ручного расследования:
+
+```http
+POST /admin/outbox/{id}/ignore
+Content-Type: application/json
+X-Admin-Api-Key: <operator-key>
+
+{
+  "reason": "Событие относится к тестовым данным и не должно публиковаться"
+}
+```
+
+`ignore` переводит только `PENDING` или `FAILED` записи в `IGNORED`.
+`PUBLISHED` записи менять нельзя.
+
+### Общий audit trail
+
+Каждый HTTP-запрос к `/admin/*` дополнительно сохраняется в
+`admin_audit_events`. Это общий журнал для всех admin endpoints, не только DLQ:
+reprocess, ignore, будущий outbox replay, ручной retention run или изменение
+состояния заказа должны оставлять одинаковый след.
+
+Запись содержит:
+
+- `actor` и `role` из проверенного admin principal-а;
+- `method`, `path`, `action`;
+- `entity_type`, `entity_id`;
+- `decision`: `ALLOWED`, `DENIED` или `FAILED`;
+- `request_id`, `correlation_id`;
+- `ip`, `user_agent`, `duration_ms`;
+- `created_at`.
+
+`dlq_audit_log` остаётся доменным журналом решения по конкретной DLQ-записи, а
+`admin_audit_events` отвечает на общий эксплуатационный вопрос: кто и когда
+обращался к admin API и чем закончился запрос.
+
 ## Retention
 
 `DlqRetentionService` раз в сутки удаляет только завершённые

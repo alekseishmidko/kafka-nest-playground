@@ -147,6 +147,22 @@ async function main() {
       "audit reprocessed eventId"
     );
 
+    const adminAudit = await waitFor(
+      () => readAdminAuditEvent(postgres, dlq.id, "dlq.reprocess"),
+      `admin audit event for DLQ row ${dlq.id}`
+    );
+
+    assertEqual(adminAudit.actor, "dlq-operator", "admin audit actor");
+    assertEqual(adminAudit.role, "DLQ_OPERATOR", "admin audit role");
+    assertEqual(adminAudit.method, "POST", "admin audit method");
+    assertEqual(
+      adminAudit.entity_type,
+      "dead_letter_event",
+      "admin audit entity type"
+    );
+    assertEqual(adminAudit.entity_id, dlq.id, "admin audit entity id");
+    assertEqual(adminAudit.decision, "ALLOWED", "admin audit decision");
+
     const outbox = await waitFor(
       async () => {
         const row = await readOutboxByEventId(
@@ -194,6 +210,7 @@ async function main() {
         originalEventId: originalEvent.eventId,
         reprocessedEventId: reprocessed.reprocessedEventId,
         auditAction: auditLog.action,
+        adminAuditDecision: adminAudit.decision,
         traceId,
         outboxStatus: outbox.status,
         orderId,
@@ -415,6 +432,34 @@ async function readAuditLog(postgres, deadLetterEventId) {
       limit 1
     `,
     [deadLetterEventId]
+  );
+
+  return result.rows[0] ?? null;
+}
+
+async function readAdminAuditEvent(postgres, entityId, action) {
+  const result = await postgres.query(
+    `
+      select
+        actor,
+        role,
+        method,
+        path,
+        action,
+        entity_type,
+        entity_id,
+        decision,
+        status_code,
+        request_id,
+        correlation_id
+      from admin_audit_events
+      where entity_type = 'dead_letter_event'
+        and entity_id = $1
+        and action = $2
+      order by created_at desc
+      limit 1
+    `,
+    [entityId, action]
   );
 
   return result.rows[0] ?? null;

@@ -151,7 +151,8 @@ export class PostgresOutboxStore
     const result = {
       [OutboxEventStatus.Pending]: 0,
       [OutboxEventStatus.Published]: 0,
-      [OutboxEventStatus.Failed]: 0
+      [OutboxEventStatus.Failed]: 0,
+      [OutboxEventStatus.Ignored]: 0
     };
 
     for (const row of rows) {
