@@ -17,6 +17,8 @@ import { join } from "node:path";
 import { DlqModule } from "./modules/dlq/dlq.module";
 import { OperationalMetricsModule } from "./modules/operational-metrics/operational-metrics.module";
 import { TechnicalRetentionModule } from "./modules/retention/technical-retention.module";
+import { AdminAuditModule } from "./modules/admin-audit/admin-audit.module";
+import { OutboxAdminModule } from "./modules/outbox-admin/outbox-admin.module";
 
 loadServiceEnvFiles(join(process.cwd()));
 
@@ -62,8 +64,10 @@ loadServiceEnvFiles(join(process.cwd()));
         };
       }
     }),
+    AdminAuditModule,
     OrdersModule,
     DlqModule,
+    OutboxAdminModule,
     TechnicalRetentionModule,
     OperationalMetricsModule
   ]
