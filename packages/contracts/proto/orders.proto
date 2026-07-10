@@ -4,6 +4,7 @@ package orders;
 
 service OrdersService {
   rpc CreateOrder (CreateOrderRequest) returns (CreateOrderResponse);
+  rpc CancelOrder (CancelOrderRequest) returns (CancelOrderResponse);
 }
 
 message CreateOrderItem {
@@ -26,4 +27,19 @@ message CreateOrderResponse {
   double totalAmount = 5;
   int32 itemCount = 6;
   string createdAt = 7;
+}
+
+message CancelOrderRequest {
+  string id = 1;
+  string reason = 2;
+  string requestedBy = 3;
+}
+
+message CancelOrderResponse {
+  string id = 1;
+  string status = 2;
+  string cancellationStatus = 3;
+  string reason = 4;
+  string requestedBy = 5;
+  string currentStatus = 6;
 }

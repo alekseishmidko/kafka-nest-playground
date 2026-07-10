@@ -4,10 +4,19 @@ import { PinoLogger } from "@kafka-playground/observability";
 import { lastValueFrom, Observable } from "rxjs";
 import { ORDERS_GRPC_CLIENT } from "../../grpc/grpc-clients.constants";
 import type { CreateOrderDto } from "./dto/create-order.dto";
+import type {
+  CancelOrderDto,
+  CancelOrderResponseDto
+} from "./dto/cancel-order.dto";
 import type { OrderResponseDto } from "./dto/order-response.dto";
 
 interface OrdersGrpcService {
   createOrder(payload: CreateOrderDto): Observable<OrderResponseDto>;
+  cancelOrder(payload: {
+    id: string;
+    reason: string;
+    requestedBy: "user";
+  }): Observable<CancelOrderResponseDto>;
 }
 
 @Injectable()
@@ -48,5 +57,36 @@ export class OrdersService implements OnModuleInit {
     );
 
     return order;
+  }
+
+  async cancelOrder(
+    id: string,
+    dto: CancelOrderDto
+  ): Promise<CancelOrderResponseDto> {
+    this.logger.info(
+      {
+        orderId: id
+      },
+      "Forwarding cancel order request to order-service via gRPC"
+    );
+
+    const result = await lastValueFrom(
+      this.ordersGrpcService.cancelOrder({
+        id,
+        reason: dto.reason,
+        requestedBy: "user"
+      })
+    );
+
+    this.logger.info(
+      {
+        orderId: result.id,
+        status: result.status,
+        cancellationStatus: result.cancellationStatus
+      },
+      "Order-service gRPC cancel order request completed"
+    );
+
+    return result;
   }
 }

@@ -9,6 +9,9 @@ import {
 import {
   EVENT_TOPIC_MAP,
   type KafkaTopicName,
+  type OrderCancellationRejectedEvent,
+  type OrderCancellationRequestedEvent,
+  type OrderCancelledEvent,
   type OrderCreatedEvent
 } from "@kafka-playground/contracts";
 import {
@@ -24,6 +27,13 @@ import {
   decideOrderTransition,
   type OrderLifecycleEvent
 } from "./order-state-machine";
+import {
+  createOrderCancellationRejectedEvent,
+  createOrderCancellationRequestedEvent,
+  createUserOrderCancelledEvent,
+  decideOrderCancellation,
+  type OrderCancellationCommand
+} from "./order-cancellation";
 
 export interface CreatePendingOrderParams {
   userId: string;
@@ -72,6 +82,24 @@ export type OrderLifecycleProcessingResult =
   | {
       outcome: "INVALID_TRANSITION";
       currentStatus: OrderStatus;
+    };
+
+export type OrderCancellationProcessingResult =
+  | {
+      outcome: "ACCEPTED";
+      previousStatus: OrderStatus;
+      status: OrderStatus.Cancelled;
+      requestedEvent: OrderCancellationRequestedEvent;
+      finalEvent: OrderCancelledEvent;
+    }
+  | {
+      outcome: "REJECTED";
+      status: OrderStatus;
+      requestedEvent: OrderCancellationRequestedEvent;
+      rejectedEvent: OrderCancellationRejectedEvent;
+    }
+  | {
+      outcome: "UNKNOWN_ORDER";
     };
 
 @Injectable()
@@ -257,6 +285,112 @@ export class OrdersRepository {
         status: updatedOrder.status,
         finalEvent
       };
+      })
+    );
+  }
+
+  /**
+   * Обрабатывает пользовательскую/операторскую команду отмены заказа.
+   *
+   * Запрос отмены всегда фиксируется событием `OrderCancellationRequested`.
+   * Если текущий статус разрешает отмену, статус заказа меняется на
+   * `CANCELLED` и сохраняется `OrderCancelled`. Если переход запрещён,
+   * сохраняется `OrderCancellationRejected`. Все изменения выполняются в одной
+   * транзакции с outbox-записями.
+   */
+  async cancelOrder(
+    command: OrderCancellationCommand
+  ): Promise<OrderCancellationProcessingResult> {
+    return runInTraceSpan(
+      "postgres transaction cancel order",
+      {
+        kind: SpanKind.INTERNAL,
+        attributes: {
+          "db.system": "postgresql",
+          "db.operation.name": "transaction",
+          "order.id": command.orderId,
+          "order.cancellation.requested_by": command.requestedBy
+        }
+      },
+      () => this.repository.manager.transaction(async (manager) => {
+        const order = await manager.findOne(OrderEntity, {
+          where: { id: command.orderId },
+          lock: { mode: "pessimistic_write" }
+        });
+
+        if (!order) {
+          return { outcome: "UNKNOWN_ORDER" };
+        }
+
+        const occurredAt = new Date().toISOString();
+        const requestedEvent = createOrderCancellationRequestedEvent(
+          order,
+          command,
+          occurredAt
+        );
+        const decision = decideOrderCancellation(order.status);
+
+        await manager.save(
+          createOutboxEventEntity({
+            topic: EVENT_TOPIC_MAP.OrderCancellationRequested,
+            messageKey: order.id,
+            event: requestedEvent,
+            traceContext: captureActiveTraceContext()
+          })
+        );
+
+        if (!decision.accepted) {
+          const rejectedEvent = createOrderCancellationRejectedEvent(
+            order,
+            command,
+            requestedEvent,
+            decision.rejectedReason,
+            occurredAt
+          );
+
+          await manager.save(
+            createOutboxEventEntity({
+              topic: EVENT_TOPIC_MAP.OrderCancellationRejected,
+              messageKey: order.id,
+              event: rejectedEvent,
+              traceContext: captureActiveTraceContext()
+            })
+          );
+
+          return {
+            outcome: "REJECTED",
+            status: order.status,
+            requestedEvent,
+            rejectedEvent
+          };
+        }
+
+        const previousStatus = order.status;
+        order.status = decision.to;
+        const updatedOrder = await manager.save(order);
+        const finalEvent = createUserOrderCancelledEvent(
+          updatedOrder,
+          command,
+          requestedEvent,
+          occurredAt
+        );
+
+        await manager.save(
+          createOutboxEventEntity({
+            topic: EVENT_TOPIC_MAP.OrderCancelled,
+            messageKey: updatedOrder.id,
+            event: finalEvent,
+            traceContext: captureActiveTraceContext()
+          })
+        );
+
+        return {
+          outcome: "ACCEPTED",
+          previousStatus,
+          status: OrderStatus.Cancelled,
+          requestedEvent,
+          finalEvent
+        };
       })
     );
   }

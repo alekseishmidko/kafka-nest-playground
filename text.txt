@@ -58,13 +58,7 @@ RBAC
 rate limits
 audit
 Сделать общий AdminSecurityModule, а не DLQ-specific guards. Потом все будущие admin endpoints будут защищены по умолчанию.
-2. Admin API для outbox Сейчас outbox есть как инфраструктурный механизм, но управлять им руками сложно. Полезные endpoints:
-GET  /admin/outbox?status=FAILED
-GET  /admin/outbox/:id
-POST /admin/outbox/:id/retry
-POST /admin/outbox/retry-failed
-POST /admin/outbox/:id/ignore
-Это даст реальный production-инструмент: видеть stuck events, retry failed events, расследовать publish проблемы.
+
 3. Admin API для inbox/idempotency Для kafka_consumer_inbox можно добавить read-only endpoints:
 GET /admin/inbox?consumer=payment-service&status=COMPLETED
 GET /admin/inbox/:id

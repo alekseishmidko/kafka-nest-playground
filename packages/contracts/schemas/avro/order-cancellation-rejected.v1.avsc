@@ -1,10 +1,10 @@
 {
   "type": "record",
-  "name": "OrderCancelled",
+  "name": "OrderCancellationRejected",
   "namespace": "kafka_playground.order.events.v1",
   "fields": [
     { "name": "eventId", "type": "string" },
-    { "name": "eventType", "type": "string", "default": "OrderCancelled" },
+    { "name": "eventType", "type": "string", "default": "OrderCancellationRejected" },
     { "name": "eventVersion", "type": "int", "default": 1 },
     { "name": "occurredAt", "type": "string" },
     { "name": "correlationId", "type": "string" },
@@ -14,20 +14,22 @@
       "name": "payload",
       "type": {
         "type": "record",
-        "name": "OrderCancelledPayload",
+        "name": "OrderCancellationRejectedPayload",
         "fields": [
           { "name": "orderId", "type": "string" },
           { "name": "userId", "type": "string" },
           { "name": "reason", "type": "string" },
           {
-            "name": "cancelledBy",
+            "name": "requestedBy",
             "type": {
               "type": "enum",
-              "name": "OrderCancellationSource",
-              "symbols": ["risk", "payment", "user", "operator"]
+              "name": "OrderCancellationRejectedRequester",
+              "symbols": ["user", "operator"]
             }
           },
-          { "name": "cancelledAt", "type": "string" }
+          { "name": "currentStatus", "type": "string" },
+          { "name": "rejectedReason", "type": "string" },
+          { "name": "rejectedAt", "type": "string" }
         ]
       }
     }

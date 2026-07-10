@@ -11,4 +11,13 @@ export class OrdersController {
   createOrder(dto: CreateOrderDto) {
     return this.ordersService.createOrder(dto);
   }
+
+  @GrpcMethod("OrdersService", "CancelOrder")
+  cancelOrder(command: {
+    id: string;
+    reason: string;
+    requestedBy?: "user" | "operator";
+  }) {
+    return this.ordersService.cancelOrder(command);
+  }
 }
