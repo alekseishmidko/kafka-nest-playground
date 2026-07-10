@@ -21,6 +21,34 @@ export interface OrderCreatedPayload {
 
 export type OrderCreatedEvent = EventEnvelope<OrderCreatedPayload, "OrderCreated">;
 
+export interface OrderCancellationRequestedPayload {
+  orderId: string;
+  userId: string;
+  reason: string;
+  requestedBy: "user" | "operator";
+  requestedAt: string;
+}
+
+export type OrderCancellationRequestedEvent = EventEnvelope<
+  OrderCancellationRequestedPayload,
+  "OrderCancellationRequested"
+>;
+
+export interface OrderCancellationRejectedPayload {
+  orderId: string;
+  userId: string;
+  reason: string;
+  requestedBy: "user" | "operator";
+  currentStatus: string;
+  rejectedReason: string;
+  rejectedAt: string;
+}
+
+export type OrderCancellationRejectedEvent = EventEnvelope<
+  OrderCancellationRejectedPayload,
+  "OrderCancellationRejected"
+>;
+
 export interface OrderConfirmedPayload {
   orderId: string;
   userId: string;
@@ -39,7 +67,7 @@ export interface OrderCancelledPayload {
   orderId: string;
   userId: string;
   reason: string;
-  cancelledBy: "risk" | "payment";
+  cancelledBy: "risk" | "payment" | "user" | "operator";
   cancelledAt: string;
 }
 
@@ -121,6 +149,8 @@ export type DeadLetterEvent = EventEnvelope<DeadLetterPayload, "DeadLetterEvent"
 
 export type DomainEvent =
   | OrderCreatedEvent
+  | OrderCancellationRequestedEvent
+  | OrderCancellationRejectedEvent
   | OrderConfirmedEvent
   | OrderCancelledEvent
   | OrderRiskApprovedEvent
@@ -132,6 +162,8 @@ export type DomainEvent =
 
 export const EVENT_TOPIC_MAP = {
   OrderCreated: KAFKA_TOPICS.orderOrderEvents,
+  OrderCancellationRequested: KAFKA_TOPICS.orderOrderEvents,
+  OrderCancellationRejected: KAFKA_TOPICS.orderOrderEvents,
   OrderConfirmed: KAFKA_TOPICS.orderOrderEvents,
   OrderCancelled: KAFKA_TOPICS.orderOrderEvents,
   OrderRiskApproved: KAFKA_TOPICS.riskRiskEvents,
@@ -146,6 +178,8 @@ export type DomainEventType = keyof typeof EVENT_TOPIC_MAP;
 
 export const EVENT_SCHEMA_SUBJECTS = {
   OrderCreated: `${EVENT_TOPIC_MAP.OrderCreated}-OrderCreated-value`,
+  OrderCancellationRequested: `${EVENT_TOPIC_MAP.OrderCancellationRequested}-OrderCancellationRequested-value`,
+  OrderCancellationRejected: `${EVENT_TOPIC_MAP.OrderCancellationRejected}-OrderCancellationRejected-value`,
   OrderConfirmed: `${EVENT_TOPIC_MAP.OrderConfirmed}-OrderConfirmed-value`,
   OrderCancelled: `${EVENT_TOPIC_MAP.OrderCancelled}-OrderCancelled-value`,
   OrderRiskApproved: `${EVENT_TOPIC_MAP.OrderRiskApproved}-OrderRiskApproved-value`,

@@ -21,7 +21,13 @@ export enum OrderStatusDto {
   PAYMENT_AUTHORIZED = "PAYMENT_AUTHORIZED",
 
   /** Payment-service не смог авторизовать оплату заказа. */
-  PAYMENT_FAILED = "PAYMENT_FAILED"
+  PAYMENT_FAILED = "PAYMENT_FAILED",
+
+  /** Заказ подтверждён после успешной оплаты. */
+  CONFIRMED = "CONFIRMED",
+
+  /** Заказ отменён бизнес-правилом или пользовательской командой. */
+  CANCELLED = "CANCELLED"
 }
 
 /**

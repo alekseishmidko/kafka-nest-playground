@@ -79,6 +79,22 @@ const ALLOWED_CORRECTED_PAYLOAD_FIELDS: Record<
     "totalAmount",
     "itemCount"
   ],
+  OrderCancellationRequested: [
+    "orderId",
+    "userId",
+    "reason",
+    "requestedBy",
+    "requestedAt"
+  ],
+  OrderCancellationRejected: [
+    "orderId",
+    "userId",
+    "reason",
+    "requestedBy",
+    "currentStatus",
+    "rejectedReason",
+    "rejectedAt"
+  ],
   OrderConfirmed: [
     "orderId",
     "userId",
@@ -169,6 +185,28 @@ export function validateDomainEvent(event: DomainEvent): void {
       requireNumber(payload.totalAmount, "payload.totalAmount");
       requireNumber(payload.itemCount, "payload.itemCount");
       return;
+    case "OrderCancellationRequested":
+      requireUuid(payload.orderId, "payload.orderId");
+      requireString(payload.userId, "payload.userId");
+      requireString(payload.reason, "payload.reason");
+      requireOneOf(payload.requestedBy, "payload.requestedBy", [
+        "user",
+        "operator"
+      ]);
+      requireString(payload.requestedAt, "payload.requestedAt");
+      return;
+    case "OrderCancellationRejected":
+      requireUuid(payload.orderId, "payload.orderId");
+      requireString(payload.userId, "payload.userId");
+      requireString(payload.reason, "payload.reason");
+      requireOneOf(payload.requestedBy, "payload.requestedBy", [
+        "user",
+        "operator"
+      ]);
+      requireString(payload.currentStatus, "payload.currentStatus");
+      requireString(payload.rejectedReason, "payload.rejectedReason");
+      requireString(payload.rejectedAt, "payload.rejectedAt");
+      return;
     case "OrderConfirmed":
       requireUuid(payload.orderId, "payload.orderId");
       requireString(payload.userId, "payload.userId");
@@ -183,7 +221,9 @@ export function validateDomainEvent(event: DomainEvent): void {
       requireString(payload.reason, "payload.reason");
       requireOneOf(payload.cancelledBy, "payload.cancelledBy", [
         "risk",
-        "payment"
+        "payment",
+        "user",
+        "operator"
       ]);
       requireString(payload.cancelledAt, "payload.cancelledAt");
       return;

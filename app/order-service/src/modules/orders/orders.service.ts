@@ -1,4 +1,8 @@
-import { Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException
+} from "@nestjs/common";
 import {
   type KafkaTopicName,
   type OrderCreatedEvent,
@@ -14,10 +18,17 @@ import type { CreateOrderDto } from "./dto/create-order.dto";
 import { OrdersRepository } from "./orders.repository";
 import type { OrderLifecycleEvent } from "./order-state-machine";
 import { assertValidOrderId } from "./order-id";
+import type { OrderCancellationRequester } from "./order-cancellation";
 
 export interface KafkaEventSource {
   topic: KafkaTopicName;
   offset: string;
+}
+
+export interface CancelOrderCommand {
+  id: string;
+  reason: string;
+  requestedBy?: OrderCancellationRequester;
 }
 
 @Injectable()
@@ -143,6 +154,68 @@ export class OrdersService {
     });
   }
 
+  async cancelOrder(command: CancelOrderCommand) {
+    assertValidOrderId(command.id);
+    const reason = requireCancellationReason(command.reason);
+    const requestedBy = command.requestedBy ?? "user";
+    const result = await this.ordersRepository.cancelOrder({
+      orderId: command.id,
+      reason,
+      requestedBy
+    });
+
+    if (result.outcome === "UNKNOWN_ORDER") {
+      throw new NotFoundException(`Order ${command.id} was not found`);
+    }
+
+    void this.outboxPublisher.publishPending();
+
+    if (result.outcome === "REJECTED") {
+      this.logger.warn(
+        {
+          orderId: command.id,
+          status: result.status,
+          reason,
+          requestedBy,
+          rejectedReason: result.rejectedEvent.payload.rejectedReason,
+          eventId: result.rejectedEvent.eventId
+        },
+        "Order cancellation rejected"
+      );
+
+      return {
+        id: command.id,
+        status: result.status,
+        cancellationStatus: "REJECTED",
+        reason,
+        requestedBy,
+        currentStatus: result.status
+      };
+    }
+
+    this.logger.info(
+      {
+        orderId: command.id,
+        previousStatus: result.previousStatus,
+        status: result.status,
+        reason,
+        requestedBy,
+        eventId: result.finalEvent.eventId
+      },
+      "Order cancellation accepted"
+    );
+
+    return {
+      id: command.id,
+      status: result.status,
+      cancellationStatus: "ACCEPTED",
+      reason,
+      requestedBy,
+      currentStatus: result.status
+    };
+  }
+
+
   /**
    * Передаёт событие в транзакционный repository и централизованно логирует
    * все исходы: применение, дубль, неизвестный заказ и запрещённый переход.
@@ -243,4 +316,16 @@ export class OrdersService {
       void this.outboxPublisher.publishPending();
     }
   }
+}
+
+function requireCancellationReason(value: string): string {
+  const reason = value.trim();
+
+  if (reason.length < 5 || reason.length > 1000) {
+    throw new BadRequestException(
+      "Cancellation reason must contain between 5 and 1000 characters"
+    );
+  }
+
+  return reason;
 }
