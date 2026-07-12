@@ -29,6 +29,137 @@ src/
 компоненты через `@kafka-playground/kafka` и не зависят от внутреннего
 расположения файлов.
 
+Дополнительная документация рядом с кодом:
+
+- [`src/consumer/README.md`](./src/consumer/README.md)
+- [`src/inbox/README.md`](./src/inbox/README.md)
+- [`src/retry/README.md`](./src/retry/README.md)
+- [`docs/adr`](./docs/adr)
+
+## Быстрый старт
+
+### 1. Зарегистрировать KafkaModule
+
+```ts
+KafkaModule.registerAsync({
+  inject: [ConfigService],
+  useFactory: (config: ConfigService) => {
+    const clientId = config.getOrThrow<string>("KAFKA_CLIENT_ID");
+    const brokers = config.getOrThrow<string>("KAFKA_BROKERS").split(",");
+    const groupId = config.getOrThrow<string>("KAFKA_CONSUMER_GROUP_ID");
+
+    return {
+      clientId,
+      serviceName: "payment-service",
+      brokers,
+      consumerGroupId: groupId,
+      schemaRegistryUrl: config.getOrThrow<string>("SCHEMA_REGISTRY_URL"),
+      producerClient: new KafkaJsProducerClient({
+        clientId,
+        brokers
+      }),
+      consumerClient: new KafkaJsConsumerClient({
+        clientId,
+        brokers,
+        groupId
+      }),
+      inboxStore: new PostgresKafkaInboxStore({
+        host: config.getOrThrow<string>("POSTGRES_HOST"),
+        port: Number(config.getOrThrow<string>("POSTGRES_PORT")),
+        user: config.getOrThrow<string>("POSTGRES_USER"),
+        password: config.getOrThrow<string>("POSTGRES_PASSWORD"),
+        database: config.getOrThrow<string>("POSTGRES_DB")
+      })
+    };
+  }
+});
+```
+
+Если сервис только публикует события, `consumerClient` и `inboxStore` можно не
+передавать. Если сервис только читает, producer всё равно нужен для retry/DLQ.
+
+### 2. Опубликовать событие
+
+```ts
+await this.kafkaProducer.publish({
+  topic: EVENT_TOPIC_MAP.OrderCreated,
+  key: order.id,
+  event: {
+    eventId: randomUUID(),
+    eventType: "OrderCreated",
+    eventVersion: 1,
+    occurredAt: new Date().toISOString(),
+    correlationId: randomUUID(),
+    causationId: null,
+    producer: "order-service",
+    payload: {
+      orderId: order.id,
+      userId: order.userId,
+      currency: order.currency,
+      totalAmount: Number(order.totalAmount),
+      itemCount: order.itemCount
+    }
+  }
+});
+```
+
+Для бизнес-событий после записи в БД используйте outbox, а не прямой producer.
+Прямой producer подходит для retry/DLQ dispatcher-а или команд без собственной
+business transaction.
+
+### 3. Подписаться на topic
+
+```ts
+@Injectable()
+export class PaymentConsumer implements OnModuleInit {
+  constructor(
+    private readonly runner: KafkaConsumerRunner,
+    private readonly paymentService: PaymentService
+  ) {}
+
+  async onModuleInit(): Promise<void> {
+    await this.runner.subscribe(
+      {
+        topic: KAFKA_TOPICS.riskRiskEvents
+      },
+      (context) => this.paymentService.handleRiskApproved(context)
+    );
+  }
+}
+```
+
+Handler получает уже десериализованный Avro event envelope:
+
+```ts
+async handleRiskApproved(
+  context: KafkaConsumerMessageContext<OrderRiskApprovedEvent>
+): Promise<void> {
+  const orderId = context.event.payload.orderId;
+}
+```
+
+### 4. Сделать handler идемпотентным
+
+```ts
+await this.idempotentProcessor.process(
+  context,
+  () => ({
+    event: createPaymentAuthorizedEvent(context.event),
+    topic: KAFKA_TOPICS.paymentPaymentEvents,
+    key: context.event.payload.orderId
+  }),
+  (result) =>
+    this.kafkaProducer.publish({
+      topic: result.topic,
+      key: result.key,
+      event: result.event
+    })
+);
+```
+
+`prepare` можно выполнить один раз, `effect` может повториться после crash
+window. Поэтому downstream event должен иметь стабильный `eventId`.
+
 ## Переиспользование в других проектах
 
 Для проектов, которым нужны только типы, headers и чистая retry policy, есть
