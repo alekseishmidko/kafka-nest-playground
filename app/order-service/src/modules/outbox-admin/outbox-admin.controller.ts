@@ -13,13 +13,15 @@ import {
 } from "@nestjs/common";
 import { OutboxEventStatus } from "@kafka-playground/outbox";
 import {
-  CurrentDlqPrincipal,
-  DlqAdminRole,
-  DlqApiKeyGuard,
-  type DlqAdminPrincipal,
-  DlqRateLimitGuard,
-  DlqRoles
-} from "../dlq/dlq-auth";
+  AdminApiKeyGuard,
+  AdminPermission,
+  AdminPermissions,
+  AdminRateLimitGuard,
+  AdminRole,
+  AdminRoles,
+  CurrentAdminPrincipal,
+  type AdminPrincipal
+} from "../admin-security";
 import { OutboxAdminService } from "./outbox-admin.service";
 
 interface IgnoreOutboxEventBody {
@@ -34,7 +36,7 @@ interface IgnoreOutboxEventBody {
  * запроса: кто смотрел stuck events, кто запускал retry и кто исключил запись.
  */
 @Controller("admin/outbox")
-@UseGuards(DlqApiKeyGuard, DlqRateLimitGuard)
+@UseGuards(AdminApiKeyGuard, AdminRateLimitGuard)
 export class OutboxAdminController {
   constructor(private readonly outboxAdmin: OutboxAdminService) {}
 
@@ -42,7 +44,8 @@ export class OutboxAdminController {
    * Возвращает страницу outbox-событий для диагностики stuck/backlog проблем.
    */
   @Get()
-  @DlqRoles(DlqAdminRole.Viewer, DlqAdminRole.Operator)
+  @AdminRoles(AdminRole.Viewer, AdminRole.Operator)
+  @AdminPermissions(AdminPermission.Read)
   findMany(
     @Query("status") status: string | undefined,
     @Query("limit", new DefaultValuePipe(50), ParseIntPipe) limit: number,
@@ -58,7 +61,8 @@ export class OutboxAdminController {
   }
 
   @Get(":id")
-  @DlqRoles(DlqAdminRole.Viewer, DlqAdminRole.Operator)
+  @AdminRoles(AdminRole.Viewer, AdminRole.Operator)
+  @AdminPermissions(AdminPermission.Read)
   findOne(@Param("id", new ParseUUIDPipe()) id: string) {
     return this.outboxAdmin.findOne(id);
   }
@@ -67,7 +71,8 @@ export class OutboxAdminController {
    * Снимает retry backoff с одной FAILED-записи.
    */
   @Post(":id/retry")
-  @DlqRoles(DlqAdminRole.Operator)
+  @AdminRoles(AdminRole.Operator)
+  @AdminPermissions(AdminPermission.Dangerous)
   retryOne(@Param("id", new ParseUUIDPipe()) id: string) {
     return this.outboxAdmin.retryOne(id);
   }
@@ -76,7 +81,8 @@ export class OutboxAdminController {
    * Снимает retry backoff с пачки FAILED-записей.
    */
   @Post("retry-failed")
-  @DlqRoles(DlqAdminRole.Operator)
+  @AdminRoles(AdminRole.Operator)
+  @AdminPermissions(AdminPermission.Dangerous)
   retryFailed(
     @Query("limit", new DefaultValuePipe(100), ParseIntPipe) limit: number
   ) {
@@ -93,11 +99,12 @@ export class OutboxAdminController {
    * Исключает запись из публикации после ручного расследования.
    */
   @Post(":id/ignore")
-  @DlqRoles(DlqAdminRole.Operator)
+  @AdminRoles(AdminRole.Operator)
+  @AdminPermissions(AdminPermission.Write)
   ignore(
     @Param("id", new ParseUUIDPipe()) id: string,
     @Body() body: IgnoreOutboxEventBody,
-    @CurrentDlqPrincipal() principal: DlqAdminPrincipal
+    @CurrentAdminPrincipal() principal: AdminPrincipal
   ) {
     return this.outboxAdmin.ignore(id, {
       operatorId: principal.operatorId,

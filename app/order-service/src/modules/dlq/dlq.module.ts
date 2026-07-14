@@ -8,10 +8,6 @@ import { DlqRepository } from "./dlq.repository";
 import { DlqService } from "./dlq.service";
 import { DeadLetterEventEntity } from "./entities/dead-letter-event.entity";
 import { DlqAuditLogEntity } from "./entities/dlq-audit-log.entity";
-import {
-  DlqApiKeyGuard,
-  DlqRateLimitGuard
-} from "./dlq-auth";
 import { DlqRetentionService } from "./dlq-retention.service";
 
 /**
@@ -28,8 +24,6 @@ import { DlqRetentionService } from "./dlq-retention.service";
   ],
   controllers: [DlqController],
   providers: [
-    DlqApiKeyGuard,
-    DlqRateLimitGuard,
     DlqConsumer,
     DlqRepository,
     DlqRetentionService,

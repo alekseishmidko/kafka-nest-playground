@@ -153,7 +153,7 @@ async function main() {
     );
 
     assertEqual(adminAudit.actor, "dlq-operator", "admin audit actor");
-    assertEqual(adminAudit.role, "DLQ_OPERATOR", "admin audit role");
+    assertEqual(adminAudit.role, "ADMIN_OPERATOR", "admin audit role");
     assertEqual(adminAudit.method, "POST", "admin audit method");
     assertEqual(
       adminAudit.entity_type,
