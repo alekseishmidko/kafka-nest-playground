@@ -4,7 +4,8 @@ const {
   AdminPermission,
   AdminRole,
   AdminApiKeyGuard,
-  AdminRateLimitGuard
+  AdminRateLimitGuard,
+  InMemoryAdminRateLimitStore
 } = require("../dist/modules/admin-security/index.js");
 
 const VIEWER_KEY = "viewer-secret-for-unit-test";
@@ -131,7 +132,7 @@ test("аутентифицирует operator и не сохраняет исх�
   );
 });
 
-test("ограничивает один ключ шестьюдесятью запросами в минуту", () => {
+test("ограничивает один ключ шестьюдесятью запросами в минуту", async () => {
   const authGuard = createAuthGuard([AdminRole.Operator]);
   const rateLimitGuard = new AdminRateLimitGuard();
   const { context } = createContext(OPERATOR_KEY);
@@ -139,11 +140,31 @@ test("ограничивает один ключ шестьюдесятью за
   authGuard.canActivate(context);
 
   for (let requestNumber = 1; requestNumber <= 60; requestNumber += 1) {
-    assert.equal(rateLimitGuard.canActivate(context), true);
+    assert.equal(await rateLimitGuard.canActivate(context), true);
   }
 
-  assert.throws(
+  await assert.rejects(
     () => rateLimitGuard.canActivate(context),
+    /rate limit exceeded/
+  );
+});
+
+test("использует общий rate limit storage между replicas", async () => {
+  const authGuard = createAuthGuard([AdminRole.Operator]);
+  const sharedStore = new InMemoryAdminRateLimitStore();
+  const firstReplica = new AdminRateLimitGuard(sharedStore);
+  const secondReplica = new AdminRateLimitGuard(sharedStore);
+  const { context } = createContext(OPERATOR_KEY);
+
+  authGuard.canActivate(context);
+
+  for (let requestNumber = 1; requestNumber <= 30; requestNumber += 1) {
+    assert.equal(await firstReplica.canActivate(context), true);
+    assert.equal(await secondReplica.canActivate(context), true);
+  }
+
+  await assert.rejects(
+    () => firstReplica.canActivate(context),
     /rate limit exceeded/
   );
 });

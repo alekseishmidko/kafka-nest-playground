@@ -1,7 +1,7 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { PinoLogger } from "@kafka-playground/observability";
-import { Repository } from "typeorm";
+import { FindOptionsWhere, Repository } from "typeorm";
 import {
   AdminAuditDecision,
   AdminAuditEventEntity
@@ -23,6 +23,26 @@ export interface RecordAdminAuditEventParams {
   userAgent: string | null;
   durationMs: number;
   metadata?: Record<string, unknown> | null;
+}
+
+export interface FindAdminAuditEventsParams {
+  actor?: string;
+  role?: string;
+  method?: string;
+  path?: string;
+  action?: string;
+  entityType?: string;
+  entityId?: string;
+  decision?: AdminAuditDecision;
+  limit: number;
+  offset: number;
+}
+
+export interface AdminAuditEventsPage {
+  items: AdminAuditEventEntity[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 /**
@@ -74,6 +94,88 @@ export class AdminAuditService {
       );
     }
   }
+
+  /**
+   * Возвращает страницу audit events для расследований admin-действий.
+   *
+   * Фильтры намеренно работают как exact match: такой API проще объяснить,
+   * логировать и использовать в incident review. Если позже понадобится поиск
+   * по диапазону дат или partial match по path, лучше добавить отдельные query
+   * параметры и индексы под конкретные сценарии, а не усложнять текущий контракт.
+   */
+  async findPage(
+    params: FindAdminAuditEventsParams
+  ): Promise<AdminAuditEventsPage> {
+    const where = createFindWhere(params);
+    const [items, total] = await this.repository.findAndCount({
+      where,
+      order: {
+        createdAt: "DESC"
+      },
+      take: params.limit,
+      skip: params.offset
+    });
+
+    return {
+      items,
+      total,
+      limit: params.limit,
+      offset: params.offset
+    };
+  }
+
+  /**
+   * Возвращает одну audit-запись по UUID.
+   */
+  async findOne(id: string): Promise<AdminAuditEventEntity> {
+    const event = await this.repository.findOneBy({ id });
+
+    if (!event) {
+      throw new NotFoundException(`Admin audit event ${id} was not found`);
+    }
+
+    return event;
+  }
+}
+
+function createFindWhere(
+  params: FindAdminAuditEventsParams
+): FindOptionsWhere<AdminAuditEventEntity> {
+  const where: FindOptionsWhere<AdminAuditEventEntity> = {};
+
+  if (params.actor !== undefined) {
+    where.actor = params.actor;
+  }
+
+  if (params.role !== undefined) {
+    where.role = params.role;
+  }
+
+  if (params.method !== undefined) {
+    where.method = params.method;
+  }
+
+  if (params.path !== undefined) {
+    where.path = params.path;
+  }
+
+  if (params.action !== undefined) {
+    where.action = params.action;
+  }
+
+  if (params.entityType !== undefined) {
+    where.entityType = params.entityType;
+  }
+
+  if (params.entityId !== undefined) {
+    where.entityId = params.entityId;
+  }
+
+  if (params.decision !== undefined) {
+    where.decision = params.decision;
+  }
+
+  return where;
 }
 
 function truncate(value: string, maxLength: number): string {

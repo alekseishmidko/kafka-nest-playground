@@ -31,6 +31,7 @@
     "test:e2e:idempotency": "pnpm --filter @kafka-playground/testing test:e2e:idempotency",
     "test:e2e:order-lifecycle": "pnpm --filter @kafka-playground/testing test:e2e:order-lifecycle",
     "test:e2e:dlq-management": "pnpm --filter @kafka-playground/testing test:e2e:dlq-management",
+    "test:e2e:admin-audit-security": "pnpm --filter @kafka-playground/testing test:e2e:admin-audit-security",
     "test:e2e:consumer-inbox": "pnpm --filter @kafka-playground/testing test:e2e:consumer-inbox",
     "test:e2e:gate": "pnpm --filter @kafka-playground/testing test:e2e:gate",
     "test:load:order-pipeline": "pnpm --filter @kafka-playground/testing test:load:order-pipeline",

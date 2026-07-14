@@ -211,10 +211,12 @@ flowchart TD
   subgraph Controllers["Current Admin Controllers"]
     DLQ[/admin/dlq]
     Outbox[/admin/outbox]
+    AuditEvents[/admin/audit-events]
   end
 
   Controller --> DLQ
   Controller --> Outbox
+  Controller --> AuditEvents
 ```
 
 ## Package Dependencies

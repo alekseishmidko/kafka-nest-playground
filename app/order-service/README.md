@@ -146,7 +146,7 @@ NEW -> IGNORED
 Базовый адрес локально:
 
 ```text
-http://localhost:3003/admin/dlq
+http://localhost:3003/admin
 ```
 
 Каждый запрос должен передавать:
@@ -164,8 +164,22 @@ X-Admin-Api-Key: <secret>
 
 Ключи нельзя хранить в Git. В production их следует выдавать через secret
 manager и регулярно ротировать. Текущий rate limit равен 60 запросам в минуту
-на ключ в рамках одного процесса. Для нескольких replicas состояние limiter-а
-следует перенести в Redis или API gateway.
+на ключ.
+
+Rate limit поддерживает два backend-а:
+
+| Переменная | Значение | Для чего |
+| --- | --- | --- |
+| `ADMIN_RATE_LIMIT_BACKEND` | `memory` | Local/dev режим без внешней зависимости. Каждая replica считает лимит отдельно. |
+| `ADMIN_RATE_LIMIT_BACKEND` | `redis` | Production режим для нескольких replicas. Все процессы используют общий Redis-счётчик. |
+| `ADMIN_RATE_LIMIT_REDIS_URL` | `redis://redis:6379` | Redis endpoint для общего limiter-а. |
+| `ADMIN_RATE_LIMIT_MAX_REQUESTS` | `60` | Сколько запросов разрешено в окне. |
+| `ADMIN_RATE_LIMIT_WINDOW_MS` | `60000` | Размер fixed-window окна. |
+
+Для нескольких replicas используйте `ADMIN_RATE_LIMIT_BACKEND=redis`. Если
+Redis недоступен, Admin API возвращает `429`, потому что безопаснее временно
+закрыть admin endpoints, чем обходить общий limiter и разрешить каждой replica
+считать лимит независимо.
 
 Auth, RBAC и rate limit реализованы общим `AdminSecurityModule`. Названия
 переменных окружения пока сохраняют `DLQ_` prefix для обратной совместимости с
@@ -193,6 +207,8 @@ DLQ-модуля.
 | `POST /admin/outbox/:id/retry` | `admin:dangerous` |
 | `POST /admin/outbox/retry-failed` | `admin:dangerous` |
 | `POST /admin/outbox/:id/ignore` | `admin:write` |
+| `GET /admin/audit-events` | `admin:read` |
+| `GET /admin/audit-events/:id` | `admin:read` |
 
 ### Получить список
 
@@ -327,6 +343,24 @@ reprocess, ignore, будущий outbox replay, ручной retention run ил
 `dlq_audit_log` остаётся доменным журналом решения по конкретной DLQ-записи, а
 `admin_audit_events` отвечает на общий эксплуатационный вопрос: кто и когда
 обращался к admin API и чем закончился запрос.
+
+Посмотреть audit trail:
+
+```http
+GET /admin/audit-events?decision=ALLOWED&entityType=outbox_event&limit=50&offset=0
+X-Admin-Api-Key: <viewer-or-operator-key>
+```
+
+Поддерживаемые фильтры работают как exact match: `actor`, `role`, `method`,
+`path`, `action`, `entityType`, `entityId`, `decision`. `limit` должен быть в
+диапазоне `1..200`.
+
+Посмотреть одну audit-запись:
+
+```http
+GET /admin/audit-events/{id}
+X-Admin-Api-Key: <viewer-or-operator-key>
+```
 
 ## Retention
 
