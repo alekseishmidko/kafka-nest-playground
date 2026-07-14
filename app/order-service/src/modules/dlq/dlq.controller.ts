@@ -15,13 +15,15 @@ import type { CorrectedPayload } from "./dlq-reprocess.factory";
 import { DlqService } from "./dlq.service";
 import { DeadLetterEventStatus } from "./entities/dead-letter-event.entity";
 import {
-  CurrentDlqPrincipal,
-  DlqAdminRole,
-  DlqApiKeyGuard,
-  type DlqAdminPrincipal,
-  DlqRateLimitGuard,
-  DlqRoles
-} from "./dlq-auth";
+  AdminApiKeyGuard,
+  AdminPermission,
+  AdminPermissions,
+  AdminRateLimitGuard,
+  AdminRole,
+  AdminRoles,
+  CurrentAdminPrincipal,
+  type AdminPrincipal
+} from "../admin-security";
 
 interface ReprocessDeadLetterEventBody {
   payload?: CorrectedPayload;
@@ -42,7 +44,7 @@ interface IgnoreDeadLetterEventBody {
  * API позволяет повторно запускать доменные события.
  */
 @Controller("admin/dlq")
-@UseGuards(DlqApiKeyGuard, DlqRateLimitGuard)
+@UseGuards(AdminApiKeyGuard, AdminRateLimitGuard)
 export class DlqController {
   constructor(private readonly dlqService: DlqService) {}
 
@@ -50,7 +52,8 @@ export class DlqController {
    * Возвращает страницу DLQ-записей, начиная с самых новых.
    */
   @Get()
-  @DlqRoles(DlqAdminRole.Viewer, DlqAdminRole.Operator)
+  @AdminRoles(AdminRole.Viewer, AdminRole.Operator)
+  @AdminPermissions(AdminPermission.Read)
   findMany(
     @Query("status") status: string | undefined,
     @Query("limit", new DefaultValuePipe(50), ParseIntPipe) limit: number,
@@ -76,7 +79,8 @@ export class DlqController {
   }
 
   @Get(":id")
-  @DlqRoles(DlqAdminRole.Viewer, DlqAdminRole.Operator)
+  @AdminRoles(AdminRole.Viewer, AdminRole.Operator)
+  @AdminPermissions(AdminPermission.Read)
   findOne(
     @Param("id", new ParseUUIDPipe()) id: string
   ) {
@@ -87,11 +91,12 @@ export class DlqController {
    * Проверяет исправленный payload и ставит новую копию event-а в outbox.
    */
   @Post(":id/reprocess")
-  @DlqRoles(DlqAdminRole.Operator)
+  @AdminRoles(AdminRole.Operator)
+  @AdminPermissions(AdminPermission.Dangerous)
   reprocess(
     @Param("id", new ParseUUIDPipe()) id: string,
     @Body() body: ReprocessDeadLetterEventBody,
-    @CurrentDlqPrincipal() principal: DlqAdminPrincipal
+    @CurrentAdminPrincipal() principal: AdminPrincipal
   ) {
     return this.dlqService.reprocess(
       id,
@@ -105,11 +110,12 @@ export class DlqController {
   }
 
   @Post(":id/ignore")
-  @DlqRoles(DlqAdminRole.Operator)
+  @AdminRoles(AdminRole.Operator)
+  @AdminPermissions(AdminPermission.Write)
   ignore(
     @Param("id", new ParseUUIDPipe()) id: string,
     @Body() body: IgnoreDeadLetterEventBody,
-    @CurrentDlqPrincipal() principal: DlqAdminPrincipal
+    @CurrentAdminPrincipal() principal: AdminPrincipal
   ) {
     return this.dlqService.ignore(id, body.reason ?? "", {
       expectedVersion: body.version ?? 0,

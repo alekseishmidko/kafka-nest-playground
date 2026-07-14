@@ -157,15 +157,42 @@ X-Admin-Api-Key: <secret>
 
 Роли задаются разными переменными окружения:
 
-| Переменная | Роль | Разрешения |
+| Переменная | Роль | Permissions |
 | --- | --- | --- |
-| `DLQ_ADMIN_VIEWER_API_KEY` | `DLQ_VIEWER` | `GET` списка и записи |
-| `DLQ_ADMIN_OPERATOR_API_KEY` | `DLQ_OPERATOR` | чтение, reprocess, ignore |
+| `DLQ_ADMIN_VIEWER_API_KEY` | `ADMIN_VIEWER` | `admin:read` |
+| `DLQ_ADMIN_OPERATOR_API_KEY` | `ADMIN_OPERATOR` | `admin:read`, `admin:write`, `admin:dangerous` |
 
 Ключи нельзя хранить в Git. В production их следует выдавать через secret
 manager и регулярно ротировать. Текущий rate limit равен 60 запросам в минуту
 на ключ в рамках одного процесса. Для нескольких replicas состояние limiter-а
 следует перенести в Redis или API gateway.
+
+Auth, RBAC и rate limit реализованы общим `AdminSecurityModule`. Названия
+переменных окружения пока сохраняют `DLQ_` prefix для обратной совместимости с
+локальными `.env` и e2e-сценариями, но guards/decorators больше не зависят от
+DLQ-модуля.
+
+Текущая классификация permissions:
+
+| Permission | Для чего |
+| --- | --- |
+| `admin:read` | Только чтение admin state: DLQ/outbox list и details. |
+| `admin:write` | Ограниченные изменения без повторной публикации событий, например `ignore`. |
+| `admin:dangerous` | Действия, которые могут повторно опубликовать события или запустить reprocess/retry. |
+
+Текущие endpoints:
+
+| Endpoint | Permission |
+| --- | --- |
+| `GET /admin/dlq` | `admin:read` |
+| `GET /admin/dlq/:id` | `admin:read` |
+| `POST /admin/dlq/:id/reprocess` | `admin:dangerous` |
+| `POST /admin/dlq/:id/ignore` | `admin:write` |
+| `GET /admin/outbox` | `admin:read` |
+| `GET /admin/outbox/:id` | `admin:read` |
+| `POST /admin/outbox/:id/retry` | `admin:dangerous` |
+| `POST /admin/outbox/retry-failed` | `admin:dangerous` |
+| `POST /admin/outbox/:id/ignore` | `admin:write` |
 
 ### Получить список
 

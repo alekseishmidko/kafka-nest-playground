@@ -1,10 +1,11 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
-  DlqAdminRole,
-  DlqApiKeyGuard,
-  DlqRateLimitGuard
-} = require("../dist/modules/dlq/dlq-auth.js");
+  AdminPermission,
+  AdminRole,
+  AdminApiKeyGuard,
+  AdminRateLimitGuard
+} = require("../dist/modules/admin-security/index.js");
 
 const VIEWER_KEY = "viewer-secret-for-unit-test";
 const OPERATOR_KEY = "operator-secret-for-unit-test";
@@ -38,7 +39,7 @@ function createContext(apiKey) {
   };
 }
 
-function createAuthGuard(allowedRoles) {
+function createAuthGuard(allowedRoles, requiredPermissions = []) {
   const config = {
     getOrThrow(name) {
       if (name === "DLQ_ADMIN_OPERATOR_API_KEY") {
@@ -53,16 +54,20 @@ function createAuthGuard(allowedRoles) {
     }
   };
   const reflector = {
-    getAllAndOverride() {
+    getAllAndOverride(_key) {
+      if (_key === "admin_permissions") {
+        return requiredPermissions;
+      }
+
       return allowedRoles;
     }
   };
 
-  return new DlqApiKeyGuard(config, reflector);
+  return new AdminApiKeyGuard(config, reflector);
 }
 
 test("отклоняет запрос без Admin API key", () => {
-  const guard = createAuthGuard([DlqAdminRole.Viewer]);
+  const guard = createAuthGuard([AdminRole.Viewer]);
   const { context } = createContext();
 
   assert.throws(
@@ -72,31 +77,63 @@ test("отклоняет запрос без Admin API key", () => {
 });
 
 test("не разрешает viewer выполнять операторскую команду", () => {
-  const guard = createAuthGuard([DlqAdminRole.Operator]);
+  const guard = createAuthGuard([AdminRole.Operator]);
   const { context } = createContext(VIEWER_KEY);
 
   assert.throws(
     () => guard.canActivate(context),
-    /DLQ_VIEWER cannot perform this operation/
+    /ADMIN_VIEWER cannot perform this operation/
+  );
+});
+
+test("разрешает viewer читать admin endpoints", () => {
+  const guard = createAuthGuard(
+    [AdminRole.Viewer, AdminRole.Operator],
+    [AdminPermission.Read]
+  );
+  const { context, request } = createContext(VIEWER_KEY);
+
+  assert.equal(guard.canActivate(context), true);
+  assert.deepEqual(request.adminPrincipal.permissions, [
+    AdminPermission.Read
+  ]);
+});
+
+test("не разрешает viewer выполнять dangerous admin action", () => {
+  const guard = createAuthGuard(
+    [AdminRole.Viewer, AdminRole.Operator],
+    [AdminPermission.Dangerous]
+  );
+  const { context } = createContext(VIEWER_KEY);
+
+  assert.throws(
+    () => guard.canActivate(context),
+    /admin:dangerous/
   );
 });
 
 test("аутентифицирует operator и не сохраняет исходный ключ", () => {
-  const guard = createAuthGuard([DlqAdminRole.Operator]);
+  const guard = createAuthGuard([AdminRole.Operator]);
   const { context, request } = createContext(OPERATOR_KEY);
 
   assert.equal(guard.canActivate(context), true);
-  assert.equal(request.dlqPrincipal.role, DlqAdminRole.Operator);
-  assert.equal(request.dlqPrincipal.operatorId, "dlq-operator");
+  assert.equal(request.adminPrincipal.role, AdminRole.Operator);
+  assert.equal(request.adminPrincipal.operatorId, "dlq-operator");
+  assert.deepEqual(request.adminPrincipal.permissions, [
+    AdminPermission.Read,
+    AdminPermission.Write,
+    AdminPermission.Dangerous
+  ]);
+  assert.equal(request.dlqPrincipal, request.adminPrincipal);
   assert.notEqual(
-    request.dlqPrincipal.apiKeyFingerprint,
+    request.adminPrincipal.apiKeyFingerprint,
     OPERATOR_KEY
   );
 });
 
 test("ограничивает один ключ шестьюдесятью запросами в минуту", () => {
-  const authGuard = createAuthGuard([DlqAdminRole.Operator]);
-  const rateLimitGuard = new DlqRateLimitGuard();
+  const authGuard = createAuthGuard([AdminRole.Operator]);
+  const rateLimitGuard = new AdminRateLimitGuard();
   const { context } = createContext(OPERATOR_KEY);
 
   authGuard.canActivate(context);

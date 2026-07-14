@@ -19,6 +19,7 @@ import { OperationalMetricsModule } from "./modules/operational-metrics/operatio
 import { TechnicalRetentionModule } from "./modules/retention/technical-retention.module";
 import { AdminAuditModule } from "./modules/admin-audit/admin-audit.module";
 import { OutboxAdminModule } from "./modules/outbox-admin/outbox-admin.module";
+import { AdminSecurityModule } from "./modules/admin-security/admin-security.module";
 
 loadServiceEnvFiles(join(process.cwd()));
 
@@ -64,6 +65,7 @@ loadServiceEnvFiles(join(process.cwd()));
         };
       }
     }),
+    AdminSecurityModule,
     AdminAuditModule,
     OrdersModule,
     DlqModule,
