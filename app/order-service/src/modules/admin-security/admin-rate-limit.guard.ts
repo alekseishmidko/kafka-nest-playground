@@ -3,31 +3,44 @@ import {
   ExecutionContext,
   HttpException,
   HttpStatus,
+  Inject,
   Injectable,
+  Optional,
   UnauthorizedException
 } from "@nestjs/common";
 import type { AdminAuthenticatedRequest } from "./admin-security.types";
-
-interface RateBucket {
-  windowStartedAt: number;
-  requests: number;
-}
+import {
+  ADMIN_RATE_LIMIT_STORE,
+  createAdminRateLimitStoreFromEnv,
+  type AdminRateLimitStore
+} from "./admin-rate-limit.store";
 
 /**
- * Process-local fixed-window rate limiter для Admin API.
+ * Fixed-window rate limiter для Admin API.
  *
- * В single-instance local/dev режиме этого достаточно, чтобы ограничить
- * ошибочные скрипты и ручные циклы. Для нескольких replicas storage нужно
- * вынести в Redis или API gateway, иначе каждая replica будет считать лимит
- * отдельно.
+ * Guard намеренно не знает, где хранится счётчик. В local/dev можно оставить
+ * in-memory storage, а в production с несколькими replicas включить Redis
+ * backend через `ADMIN_RATE_LIMIT_BACKEND=redis`. Redis делает лимит общим для
+ * всех replicas, потому что все процессы инкрементируют один и тот же ключ.
  */
 @Injectable()
 export class AdminRateLimitGuard implements CanActivate {
-  private readonly buckets = new Map<string, RateBucket>();
-  private readonly windowMs = 60_000;
-  private readonly maxRequests = 60;
+  private readonly windowMs = readPositiveInt(
+    "ADMIN_RATE_LIMIT_WINDOW_MS",
+    60_000
+  );
+  private readonly maxRequests = readPositiveInt(
+    "ADMIN_RATE_LIMIT_MAX_REQUESTS",
+    60
+  );
 
-  canActivate(context: ExecutionContext): boolean {
+  constructor(
+    @Optional()
+    @Inject(ADMIN_RATE_LIMIT_STORE)
+    private readonly store: AdminRateLimitStore = createAdminRateLimitStoreFromEnv()
+  ) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context
       .switchToHttp()
       .getRequest<AdminAuthenticatedRequest>();
@@ -37,20 +50,10 @@ export class AdminRateLimitGuard implements CanActivate {
       throw new UnauthorizedException("Admin principal is missing");
     }
 
-    const now = Date.now();
-    const bucket = this.buckets.get(principal.apiKeyFingerprint);
+    const key = `admin:${principal.apiKeyFingerprint}`;
+    const rate = await this.increment(key);
 
-    if (!bucket || now - bucket.windowStartedAt >= this.windowMs) {
-      this.buckets.set(principal.apiKeyFingerprint, {
-        windowStartedAt: now,
-        requests: 1
-      });
-      return true;
-    }
-
-    bucket.requests += 1;
-
-    if (bucket.requests > this.maxRequests) {
+    if (rate.requests > this.maxRequests) {
       throw new HttpException(
         "Admin API rate limit exceeded",
         HttpStatus.TOO_MANY_REQUESTS
@@ -59,4 +62,30 @@ export class AdminRateLimitGuard implements CanActivate {
 
     return true;
   }
+
+  private async increment(key: string) {
+    try {
+      return await this.store.increment(key, this.windowMs);
+    } catch (error) {
+      throw new HttpException(
+        "Admin API rate limit storage is unavailable",
+        HttpStatus.TOO_MANY_REQUESTS,
+        {
+          cause: error
+        }
+      );
+    }
+  }
+}
+
+function readPositiveInt(name: string, defaultValue: number): number {
+  const rawValue = process.env[name];
+
+  if (!rawValue) {
+    return defaultValue;
+  }
+
+  const value = Number(rawValue);
+
+  return Number.isInteger(value) && value > 0 ? value : defaultValue;
 }

@@ -9,9 +9,9 @@
 - [x] Вынести DLQ-specific auth/RBAC/rate limit в общий `AdminSecurityModule`.
 - [x] Применить общий `AdminSecurityModule` ко всем `/admin/*` endpoint-ам.
 - [x] Разделить admin permissions на `read`, `write`, `dangerous`.
-- [ ] Добавить Redis-backed rate limit для нескольких replicas.
-- [ ] Добавить e2e-проверку, что `401/403/429` пишутся в `admin_audit_events`.
-- [ ] Добавить admin endpoint для просмотра `admin_audit_events`.
+- [x] Добавить Redis-backed rate limit для нескольких replicas.
+- [x] Добавить e2e-проверку, что `401/403/429` пишутся в `admin_audit_events`.
+- [x] Добавить admin endpoint для просмотра `admin_audit_events`.
 - [ ] Добавить retention policy для `admin_audit_events`.
 - [ ] Добавить alert rules для outbox backlog, DLQ backlog и consumer lag.
 
@@ -101,6 +101,9 @@
 - [x] DLQ-specific admin auth/RBAC/rate limit вынесены в общий `AdminSecurityModule`.
 - [x] Общий `AdminSecurityModule` применён ко всем текущим `/admin/*` endpoint-ам.
 - [x] Admin permissions разделены на `admin:read`, `admin:write`, `admin:dangerous`.
+- [x] Добавлен read-only Admin API для просмотра `admin_audit_events`.
+- [x] Добавлен e2e-сценарий для audit trail по `401/403/429`.
+- [x] Добавлен Redis-backed rate limit backend для нескольких replicas.
 - [x] Добавлена пользовательская отмена заказа.
 - [x] Добавлена retention policy для технических таблиц.
 - [x] Добавлены Dockerfiles, CI, Trivy, dependency audit.
