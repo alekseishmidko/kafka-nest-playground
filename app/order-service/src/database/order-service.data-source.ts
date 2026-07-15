@@ -18,6 +18,7 @@ import { AddOutboxLeaseFields1718582400000 } from "./migrations/1718582400000-ad
 import { AddTechnicalRetentionIndexes1718668800000 } from "./migrations/1718668800000-add-technical-retention-indexes";
 import { CreateAdminAuditEvents1718755200000 } from "./migrations/1718755200000-create-admin-audit-events";
 import { AddOutboxIgnoredStatus1718841600000 } from "./migrations/1718841600000-add-outbox-ignored-status";
+import { CreateOrderCreateIdempotencyKeys1718928000000 } from "./migrations/1718928000000-create-order-create-idempotency-keys";
 
 loadServiceEnvFiles(join(process.cwd()));
 
@@ -60,7 +61,8 @@ export function createOrderServiceDataSourceOptions(): DataSourceOptions {
       AddOutboxLeaseFields1718582400000,
       AddTechnicalRetentionIndexes1718668800000,
       CreateAdminAuditEvents1718755200000,
-      AddOutboxIgnoredStatus1718841600000
+      AddOutboxIgnoredStatus1718841600000,
+      CreateOrderCreateIdempotencyKeys1718928000000
     ]
   };
 }

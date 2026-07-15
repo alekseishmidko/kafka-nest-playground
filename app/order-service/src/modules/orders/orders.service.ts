@@ -25,12 +25,40 @@ export interface KafkaEventSource {
   offset: string;
 }
 
+/**
+ * Команда отмены заказа.
+ *
+ * `requestedBy` нужен, чтобы отличать пользовательскую отмену от будущей
+ * операторской/admin-отмены. Правила state machine одинаковые, но audit и
+ * события должны сохранять источник команды.
+ */
 export interface CancelOrderCommand {
   id: string;
   reason: string;
   requestedBy?: OrderCancellationRequester;
 }
 
+/**
+ * Техническая metadata команды создания заказа.
+ *
+ * Gateway передаёт сюда HTTP `Idempotency-Key` и hash нормализованного request
+ * body. Domain payload заказа не загрязняется этой metadata: ключ нужен только
+ * для безопасного повторного HTTP вызова.
+ */
+export interface CreateOrderCommand {
+  idempotencyKey?: string;
+  requestHash?: string;
+}
+
+/**
+ * Application service order-service.
+ *
+ * Сервис держит orchestration-логику: считает derived поля заказа, выбирает
+ * обычную или идемпотентную транзакцию repository, ускоряет outbox publisher и
+ * централизованно логирует результат. Сами DB locks, inbox/outbox и state
+ * transitions остаются ниже, в repository/state-machine, чтобы метод не
+ * превращался в набор SQL-деталей.
+ */
 @Injectable()
 export class OrdersService {
   constructor(
@@ -41,7 +69,15 @@ export class OrdersService {
     this.logger.setContext(OrdersService.name);
   }
 
-  async createOrder(dto: CreateOrderDto) {
+  /**
+   * Создаёт новый PENDING order и ставит `OrderCreated` в transactional outbox.
+   *
+   * При наличии `Idempotency-Key` повтор с тем же key/hash возвращает сохранённый
+   * response и не вызывает `publishPending`: второй outbox event не создаётся,
+   * поэтому ускорять publisher нечего. Первый запрос сохраняет order, outbox и
+   * idempotency response в одной PostgreSQL-транзакции.
+   */
+  async createOrder(dto: CreateOrderDto, command: CreateOrderCommand = {}) {
     this.logger.info(
       {
         userId: dto.userId,
@@ -57,7 +93,9 @@ export class OrdersService {
     );
     const itemCount = dto.items.reduce((sum, item) => sum + item.quantity, 0);
 
-    const { order, event } = await this.ordersRepository.createPendingOrderWithOutbox({
+    const createParams: Parameters<
+      OrdersRepository["createPendingOrderWithOutbox"]
+    >[0] = {
       userId: dto.userId,
       currency: dto.currency,
       totalAmount,
@@ -79,7 +117,27 @@ export class OrdersService {
           itemCount
         }
       })
-    });
+    };
+    const idempotency = readCreateOrderIdempotency(command);
+    const result = idempotency
+      ? await this.ordersRepository.createPendingOrderWithOutboxIdempotently({
+          ...createParams,
+          idempotency
+        })
+      : await this.createPendingOrderWithoutIdempotency(createParams);
+
+    if (result.replayed) {
+      this.logger.info(
+        {
+          idempotencyKey: idempotency?.key
+        },
+        "Returning stored create order response for Idempotency-Key"
+      );
+
+      return result.response;
+    }
+
+    const { order, event, response } = result;
 
     this.logger.info(
       {
@@ -105,17 +163,12 @@ export class OrdersService {
     // so the interval publisher can still recover the event if this call fails.
     void this.outboxPublisher.publishPending();
 
-    return {
-      id: order.id,
-      status: order.status,
-      userId: order.userId,
-      currency: order.currency,
-      totalAmount,
-      itemCount,
-      createdAt: order.createdAt.toISOString()
-    };
+    return response;
   }
 
+  /**
+   * Применяет положительное risk-событие к заказу.
+   */
   async handleOrderRiskApproved(
     event: OrderRiskApprovedEvent,
     source: KafkaEventSource
@@ -123,6 +176,9 @@ export class OrdersService {
     await this.processLifecycleEvent(event, source);
   }
 
+  /**
+   * Применяет отрицательное risk-событие и сохраняет причину отказа в логах.
+   */
   async handleOrderRiskRejected(
     event: OrderRiskRejectedEvent,
     source: KafkaEventSource
@@ -133,6 +189,10 @@ export class OrdersService {
     });
   }
 
+  /**
+   * Применяет успешную авторизацию платежа и при финальном переходе создаёт
+   * `OrderConfirmed` через repository.
+   */
   async handlePaymentAuthorized(
     event: PaymentAuthorizedEvent,
     source: KafkaEventSource
@@ -143,6 +203,9 @@ export class OrdersService {
     });
   }
 
+  /**
+   * Применяет отказ платежа и при финальном переходе создаёт `OrderCancelled`.
+   */
   async handlePaymentFailed(
     event: PaymentFailedEvent,
     source: KafkaEventSource
@@ -154,6 +217,14 @@ export class OrdersService {
     });
   }
 
+  /**
+   * Обрабатывает пользовательскую или операторскую отмену заказа.
+   *
+   * Repository всегда пишет `OrderCancellationRequested`, а затем либо
+   * `OrderCancelled`, либо `OrderCancellationRejected`. Это делает историю
+   * решений явной даже для запрещённых переходов, например отмены уже
+   * подтверждённого заказа.
+   */
   async cancelOrder(command: CancelOrderCommand) {
     assertValidOrderId(command.id);
     const reason = requireCancellationReason(command.reason);
@@ -316,6 +387,62 @@ export class OrdersService {
       void this.outboxPublisher.publishPending();
     }
   }
+
+  /**
+   * Совместимый путь создания заказа без `Idempotency-Key`.
+   *
+   * Возвращаемая форма специально совпадает с результатом идемпотентного пути,
+   * чтобы основной `createOrder` не держал две ветки логирования и публикации.
+   */
+  private async createPendingOrderWithoutIdempotency(
+    params: Parameters<OrdersRepository["createPendingOrderWithOutbox"]>[0]
+  ) {
+    const { order, event } =
+      await this.ordersRepository.createPendingOrderWithOutbox(params);
+
+    return {
+      replayed: false as const,
+      order,
+      event,
+      response: {
+        id: order.id,
+        status: order.status,
+        userId: order.userId,
+        currency: order.currency,
+        totalAmount: Number(order.totalAmount),
+        itemCount: order.itemCount,
+        createdAt: order.createdAt.toISOString()
+      }
+    };
+  }
+}
+
+/**
+ * Валидирует техническую idempotency metadata.
+ *
+ * Key и hash должны приходить парой. Один key без hash небезопасен: сервис не
+ * сможет проверить, что повторный request имеет то же тело.
+ */
+function readCreateOrderIdempotency(command: CreateOrderCommand):
+  | {
+      key: string;
+      requestHash: string;
+    }
+  | null {
+  if (!command.idempotencyKey && !command.requestHash) {
+    return null;
+  }
+
+  if (!command.idempotencyKey || !command.requestHash) {
+    throw new BadRequestException(
+      "Both Idempotency-Key and request hash metadata are required"
+    );
+  }
+
+  return {
+    key: command.idempotencyKey,
+    requestHash: command.requestHash
+  };
 }
 
 function requireCancellationReason(value: string): string {

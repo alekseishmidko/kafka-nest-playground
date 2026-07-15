@@ -1,6 +1,6 @@
-import { Injectable } from "@nestjs/common";
+import { ConflictException, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { EntityManager, Repository } from "typeorm";
 import {
   captureActiveTraceContext,
   runInTraceSpan,
@@ -52,6 +52,33 @@ export interface CreatePendingOrderParams {
 export interface CreatePendingOrderWithOutboxParams extends CreatePendingOrderParams {
   createEvent(order: OrderEntity): OrderCreatedEvent;
 }
+
+export interface CreateOrderIdempotencyParams {
+  key: string;
+  requestHash: string;
+}
+
+export interface CreateOrderResponseSnapshot {
+  id: string;
+  status: OrderStatus;
+  userId: string;
+  currency: string;
+  totalAmount: number;
+  itemCount: number;
+  createdAt: string;
+}
+
+export type CreatePendingOrderWithOutboxResult =
+  | {
+      replayed: false;
+      order: OrderEntity;
+      event: OrderCreatedEvent;
+      response: CreateOrderResponseSnapshot;
+    }
+  | {
+      replayed: true;
+      response: CreateOrderResponseSnapshot;
+    };
 
 /**
  * Параметры идемпотентной обработки lifecycle-события заказа.
@@ -144,29 +171,102 @@ export class OrdersRepository {
       },
       () =>
         this.repository.manager.transaction(async (manager) => {
-          const order = manager.create(OrderEntity, {
-            userId: params.userId,
-            currency: params.currency,
-            totalAmount: params.totalAmount.toFixed(2),
-            itemCount: params.itemCount,
-            status: OrderStatus.Pending,
-            items: params.items
-          });
-          const savedOrder = await manager.save(order);
-          const event = params.createEvent(savedOrder);
+          return this.persistPendingOrderWithOutbox(manager, params);
+        })
+    );
+  }
 
-          await manager.save(
-            createOutboxEventEntity({
-              topic: EVENT_TOPIC_MAP.OrderCreated,
-              messageKey: savedOrder.id,
-              event,
-              traceContext: captureActiveTraceContext()
-            })
+  /**
+   * Идемпотентно создаёт заказ для публичного `POST /orders`.
+   *
+   * `idempotency_key` вставляется до создания заказа. PostgreSQL unique index
+   * сериализует параллельные запросы с одним ключом: один запрос создаёт заказ,
+   * остальные читают сохранённый response и не пишут второй `OrderCreated`.
+   */
+  async createPendingOrderWithOutboxIdempotently(
+    params: CreatePendingOrderWithOutboxParams & {
+      idempotency: CreateOrderIdempotencyParams;
+    }
+  ): Promise<CreatePendingOrderWithOutboxResult> {
+    return runInTraceSpan(
+      "postgres transaction create order idempotently",
+      {
+        kind: SpanKind.INTERNAL,
+        attributes: {
+          "db.system": "postgresql",
+          "db.operation.name": "transaction",
+          "outbox.event.type": "OrderCreated",
+          "idempotency.key": params.idempotency.key
+        }
+      },
+      () =>
+        this.repository.manager.transaction(async (manager) => {
+          const inserted = await manager.query(
+            `
+              insert into order_create_idempotency_keys (
+                idempotency_key,
+                request_hash
+              )
+              values ($1, $2)
+              on conflict (idempotency_key) do nothing
+              returning idempotency_key
+            `,
+            [params.idempotency.key, params.idempotency.requestHash]
+          );
+
+          if (inserted.length === 0) {
+            const existing = await readIdempotencyRow(
+              manager,
+              params.idempotency.key
+            );
+
+            if (!existing) {
+              throw new ConflictException(
+                "Idempotency key exists but could not be read"
+              );
+            }
+
+            if (existing.request_hash !== params.idempotency.requestHash) {
+              throw new ConflictException(
+                "Idempotency-Key was already used with a different request body"
+              );
+            }
+
+            if (!existing.response) {
+              throw new ConflictException(
+                "Idempotency-Key request is still being processed"
+              );
+            }
+
+            return {
+              replayed: true,
+              response: existing.response as CreateOrderResponseSnapshot
+            };
+          }
+
+          const { order, event } = await this.persistPendingOrderWithOutbox(
+            manager,
+            params
+          );
+          const response = createOrderResponseSnapshot(order);
+
+          await manager.query(
+            `
+              update order_create_idempotency_keys
+              set
+                response = $2::jsonb,
+                order_id = $3,
+                updated_at = now()
+              where idempotency_key = $1
+            `,
+            [params.idempotency.key, JSON.stringify(response), order.id]
           );
 
           return {
-            order: savedOrder,
-            event
+            replayed: false,
+            order,
+            event,
+            response
           };
         })
     );
@@ -394,6 +494,67 @@ export class OrdersRepository {
       })
     );
   }
+
+  private async persistPendingOrderWithOutbox(
+    manager: EntityManager,
+    params: CreatePendingOrderWithOutboxParams
+  ): Promise<{ order: OrderEntity; event: OrderCreatedEvent }> {
+    const order = manager.create(OrderEntity, {
+      userId: params.userId,
+      currency: params.currency,
+      totalAmount: params.totalAmount.toFixed(2),
+      itemCount: params.itemCount,
+      status: OrderStatus.Pending,
+      items: params.items
+    });
+    const savedOrder = await manager.save(order);
+    const event = params.createEvent(savedOrder);
+
+    await manager.save(
+      createOutboxEventEntity({
+        topic: EVENT_TOPIC_MAP.OrderCreated,
+        messageKey: savedOrder.id,
+        event,
+        traceContext: captureActiveTraceContext()
+      })
+    );
+
+    return {
+      order: savedOrder,
+      event
+    };
+  }
+}
+
+async function readIdempotencyRow(
+  manager: EntityManager,
+  key: string
+): Promise<{ request_hash: string; response: unknown | null } | null> {
+  const result = await manager.query(
+    `
+      select request_hash, response
+      from order_create_idempotency_keys
+      where idempotency_key = $1
+      for update
+    `,
+    [key]
+  );
+
+  return result[0] ?? null;
+}
+
+function createOrderResponseSnapshot(
+  order: OrderEntity
+): CreateOrderResponseSnapshot {
+  return {
+    id: order.id,
+    status: order.status,
+    userId: order.userId,
+    currency: order.currency,
+    totalAmount: Number(order.totalAmount),
+    itemCount: order.itemCount,
+    createdAt: order.createdAt.toISOString()
+  };
 }
 
 /**

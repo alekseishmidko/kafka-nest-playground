@@ -30,9 +30,9 @@
 
 ## Priority 3: API Reliability
 
-- [ ] Добавить `Idempotency-Key` для `POST /orders`.
-- [ ] Сохранять hash request body для idempotency key.
-- [ ] Возвращать тот же response при повторе того же key/body.
+- [x] Добавить `Idempotency-Key` для `POST /orders`.
+- [x] Сохранять hash request body для idempotency key.
+- [x] Возвращать тот же response при повторе того же key/body.
 - [ ] Возвращать `409 Conflict` при том же key, но другом body.
 - [ ] Покрыть concurrent `POST /orders` с одинаковым idempotency key.
 - [ ] Добавить `GET /orders/:id`.
@@ -104,6 +104,7 @@
 - [x] Добавлен read-only Admin API для просмотра `admin_audit_events`.
 - [x] Добавлен e2e-сценарий для audit trail по `401/403/429`.
 - [x] Добавлен Redis-backed rate limit backend для нескольких replicas.
+- [x] Добавлен durable `Idempotency-Key` flow для `POST /orders`.
 - [x] Добавлена пользовательская отмена заказа.
 - [x] Добавлена retention policy для технических таблиц.
 - [x] Добавлены Dockerfiles, CI, Trivy, dependency audit.

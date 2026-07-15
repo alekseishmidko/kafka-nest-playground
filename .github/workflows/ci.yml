@@ -57,8 +57,21 @@ jobs:
         run: pnpm test
 
       # Dependency audit блокирует известные high/critical npm-уязвимости.
+      # `pnpm audit` сейчас нестабилен в CI: даже pnpm 10.34.5 обращается к
+      # retired npm audit endpoints (`/-/npm/v1/security/audits/quick` и
+      # fallback `/-/npm/v1/security/audits`) и получает HTTP 410. Поэтому
+      # dependency audit выполняет Trivy по lockfile/repository filesystem. Это
+      # сохраняет security gate, но не зависит от сломанного pnpm audit API.
       - name: Dependency audit
-        run: pnpm audit --audit-level high
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
 
   go:
     name: Go tests and vulnerability audit
@@ -169,13 +182,14 @@ jobs:
         # checkout@v7 нужен, чтобы security scan job не запускал Node 20 action.
         uses: actions/checkout@v7
 
-      # Filesystem scan ищет CVE, secrets и небезопасные настройки в IaC/config.
+      # Filesystem scan ищет secrets и небезопасные настройки в IaC/config.
+      # Dependency CVE проверяются отдельным Trivy gate в Node job.
       - name: Scan filesystem
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
-          scanners: vuln,secret,config
+          scanners: secret,config
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
