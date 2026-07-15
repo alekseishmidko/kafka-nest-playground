@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Headers,
   HttpCode,
   Param,
   ParseUUIDPipe,
@@ -11,6 +12,7 @@ import {
   ApiBody,
   ApiConsumes,
   ApiCreatedResponse,
+  ApiHeader,
   ApiInternalServerErrorResponse,
   ApiOkResponse,
   ApiOperation,
@@ -42,6 +44,12 @@ export class OrdersController {
     type: CreateOrderDto,
     description: "Данные заказа, который нужно создать."
   })
+  @ApiHeader({
+    name: "Idempotency-Key",
+    required: false,
+    description:
+      "Опциональный ключ идемпотентности. Повтор POST /orders с тем же ключом и тем же телом вернет тот же response без создания второго заказа."
+  })
   @ApiCreatedResponse({
     type: OrderResponseDto,
     description:
@@ -55,8 +63,13 @@ export class OrdersController {
     description:
       "Gateway не смог создать заказ из-за ошибки внутреннего gRPC-вызова или инфраструктуры."
   })
-  createOrder(@Body() dto: CreateOrderDto): Promise<OrderResponseDto> {
-    return this.ordersService.createOrder(dto);
+  createOrder(
+    @Body() dto: CreateOrderDto,
+    @Headers("idempotency-key") idempotencyKey?: string
+  ): Promise<OrderResponseDto> {
+    return this.ordersService.createOrder(dto, {
+      idempotencyKey
+    });
   }
 
   @Post(":id/cancel")
